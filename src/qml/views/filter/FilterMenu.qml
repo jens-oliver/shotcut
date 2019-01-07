@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2014-2017 Meltytech, LLC
- * Author: Brian Matherly <code@brianmatherly.com>
+ * Copyright (c) 2014-2018 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,19 +19,24 @@ import QtQuick 2.2
 import QtQuick.Controls 1.0
 import QtQuick.Layouts 1.1
 import org.shotcut.qml 1.0 as Shotcut
+import Shotcut.Controls 1.0 as ShotcutControls
 
 Rectangle {
     id: filterWindow
     visible: false
+    property color checkedColor: Qt.rgba(activePalette.highlight.r, activePalette.highlight.g, activePalette.highlight.b, 0.4)
 
     signal filterSelected(int index)
 
     function open() {
         filterWindow.visible = true
+        searchField.focus = true
     }
 
     function close() {
         filterWindow.visible = false
+        searchField.text = ''
+        searchField.focus = false
     }
 
     color: activePalette.window
@@ -42,11 +46,104 @@ Rectangle {
     ColumnLayout {
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.margins: 10
+        anchors.margins: 8
 
+        RowLayout {
+            id: searchBar
+            Layout.fillWidth: true
+            property var savedFilter
+
+            TextField {
+                id: searchField
+                Layout.fillWidth: true
+                focus: true
+                placeholderText: qsTr("search")
+                text: metadatamodel.search
+                onTextChanged: {
+                    if (length !== 1 && text !== metadatamodel.search) {
+                        metadatamodel.search = text
+                    }
+                    if (length > 0) {
+                        parent.savedFilter = typeGroup.current
+                        favButton.checked = vidButton.checked = audButton.checked = false
+                    } else {
+                        parent.savedFilter.checked = true
+                    }
+                }
+                Keys.onEscapePressed: {
+                    if (text !== '')
+                        text = ''
+                    else
+                        filterWindow.close()
+                }
+            }
+            ToolButton {
+                id: clearButton
+                implicitWidth: 20
+                implicitHeight: 20
+                iconName: 'edit-clear'
+                iconSource: 'qrc:///icons/oxygen/32x32/actions/edit-clear.png'
+                tooltip: qsTr('Clear search')
+                onClicked: searchField.text = ''
+            }
+        }
+
+        RowLayout {
+            id: toolBar
+            Layout.fillWidth: true
+
+            ExclusiveGroup { id: typeGroup }
+
+            ShotcutControls.ToggleButton {
+                id: favButton
+                checked: true
+                implicitWidth: 80
+                iconName: 'bookmarks'
+                iconSource: 'qrc:///icons/oxygen/32x32/places/bookmarks.png'
+                text: qsTr('Favorite')
+                tooltip: qsTr('Show favorite filters')
+                exclusiveGroup: typeGroup
+                onClicked: if (checked) metadatamodel.filter = Shotcut.MetadataModel.FavoritesFilter
+            }
+            ShotcutControls.ToggleButton {
+                id: vidButton
+                implicitWidth: 80
+                iconName: 'video-television'
+                iconSource: 'qrc:///icons/oxygen/32x32/devices/video-television.png'
+                text: qsTr('Video')
+                tooltip: qsTr('Show video filters')
+                exclusiveGroup: typeGroup
+                onClicked: if (checked) metadatamodel.filter = Shotcut.MetadataModel.VideoFilter
+            }
+            ShotcutControls.ToggleButton {
+                id: audButton
+                implicitWidth: 80
+                iconName: 'speaker'
+                iconSource: 'qrc:///icons/oxygen/32x32/actions/speaker.png'
+                text: qsTr('Audio')
+                tooltip: qsTr('Show audio filters')
+                exclusiveGroup: typeGroup
+                onClicked: if (checked) metadatamodel.filter = Shotcut.MetadataModel.AudioFilter
+            }
+            Button { // separator
+                enabled: false
+                implicitWidth: 1
+                implicitHeight: 20
+            }
+            Button {
+                id: closeButton
+                iconName: 'window-close'
+                iconSource: 'qrc:///icons/oxygen/32x32/actions/window-close.png'
+                tooltip: qsTr('Close menu')
+                onClicked: filterWindow.close()
+            }
+            Item {
+                Layout.fillWidth: true
+            }
+        }
         ScrollView {
             Layout.fillWidth: true
-            Layout.preferredHeight: filterWindow.height - toolBar.height - parent.anchors.margins * 2
+            Layout.preferredHeight: filterWindow.height - toolBar.height - searchBar.height - parent.anchors.margins * 2
 
             ListView {
                 id: menuListView
@@ -62,78 +159,6 @@ Rectangle {
                 boundsBehavior: Flickable.StopAtBounds
                 currentIndex: -1
                 focus: true
-            }
-        }
-
-        RowLayout {
-            id: toolBar
-            Layout.fillWidth: true
-
-            ExclusiveGroup { id: typeGroup }
-
-            ToolButton {
-                id: favButton
-                checkable: true
-                implicitWidth: 32
-                implicitHeight: 28
-                checked: true
-                iconName: 'bookmarks'
-                iconSource: 'qrc:///icons/oxygen/32x32/places/bookmarks.png'
-                tooltip: qsTr('Show favorite filters')
-                exclusiveGroup: typeGroup
-                onCheckedChanged: {
-                    if (checked) {
-                        metadatamodel.filter = Shotcut.MetadataModel.FavoritesFilter
-                    }
-                }
-            }
-            ToolButton {
-                id: vidButton
-                implicitWidth: 32
-                implicitHeight: 28
-                checkable: true
-                iconName: 'video-television'
-                iconSource: 'qrc:///icons/oxygen/32x32/devices/video-television.png'
-                tooltip: qsTr('Show video filters')
-                exclusiveGroup: typeGroup
-                onCheckedChanged: {
-                    if (checked) {
-                        metadatamodel.filter = Shotcut.MetadataModel.VideoFilter
-                    }
-                }
-            }
-            ToolButton {
-                id: audButton
-                implicitWidth: 32
-                implicitHeight: 28
-                checkable: true
-                iconName: 'speaker'
-                iconSource: 'qrc:///icons/oxygen/32x32/actions/speaker.png'
-                tooltip: qsTr('Show audio filters')
-                exclusiveGroup: typeGroup
-                onCheckedChanged: {
-                    if (checked) {
-                        metadatamodel.filter = Shotcut.MetadataModel.AudioFilter
-                    }
-                }
-            }
-            Button { // separator
-                enabled: false
-                implicitWidth: 1
-                implicitHeight: 20
-            }
-            ToolButton {
-                id: closeButton
-                implicitWidth: 32
-                implicitHeight: 28
-                iconName: 'window-close'
-                iconSource: 'qrc:///icons/oxygen/32x32/actions/window-close.png'
-                tooltip: qsTr('Close menu')
-                onClicked: filterWindow.close()
-            }
-
-            Item {
-                Layout.fillWidth: true
             }
         }
     }

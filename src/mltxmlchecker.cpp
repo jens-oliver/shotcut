@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2014-2017 Meltytech, LLC
- * Author: Dan Dennedy <dan@dennedy.org>
+ * Copyright (c) 2014-2018 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,6 +26,8 @@
 #include <QRegExp>
 #include <Logger.h>
 
+static QString getPrefix(const QString& name, const QString& value);
+
 static bool isMltClass(const QStringRef& name)
 {
     return name == "profile" || name == "producer" ||
@@ -45,20 +46,16 @@ static bool isNetworkResource(const QString& string)
 
 static bool isNumericProperty(const QString& name)
 {
-    return name == "length" || name == "geometry" || name == "rect";
+    return  name == "length" || name == "geometry" ||
+            name == "rect" || name == "warp_speed";
 }
 
 MltXmlChecker::MltXmlChecker()
     : m_needsGPU(false)
+    , m_needsCPU(false)
     , m_hasEffects(false)
     , m_isCorrected(false)
-#ifdef Q_OS_MAC
-    // For some reason, on macOS, Shotcut does not honor the locale-defined
-    // decimal point, and MLT writes XML with LC_NUMERIC=C.
-    , m_decimalPoint(QLocale(QLocale::C).decimalPoint())
-#else
-    , m_decimalPoint(QLocale::system().decimalPoint())
-#endif
+    , m_decimalPoint(QLocale().decimalPoint())
     , m_tempFile(QDir::tempPath().append("/shotcut-XXXXXX.mlt"))
     , m_numericValueChanged(false)
 {
@@ -96,7 +93,7 @@ bool MltXmlChecker::check(const QString& fileName)
                     } else {
                         // Upon correcting the document to conform to current system,
                         // update the declared LC_NUMERIC.
-                        m_newXml.writeAttribute("LC_NUMERIC", QLocale::system().name());
+                        m_newXml.writeAttribute("LC_NUMERIC", QLocale().name());
                     }
                 }
                 readMlt();
@@ -202,6 +199,12 @@ void MltXmlChecker::processProperties()
 #ifdef Q_OS_WIN
             fixVersion1701WindowsPathBug(p.second);
 #endif
+            // Check timewarp producer's resource property prefix.
+            QString prefix = getPrefix(p.first, p.second);
+            if (!prefix.isEmpty() && prefix != "plain:") {
+                if (checkNumericString(prefix))
+                    p.second = prefix + p.second.mid(p.second.indexOf(':') + 1);
+            }
             fixUnlinkedFile(p.second);
         }
         newProperties << MltProperty(p.first, p.second);
@@ -209,6 +212,7 @@ void MltXmlChecker::processProperties()
 
     if (mlt_class == "filter" || mlt_class == "transition" || mlt_class == "producer") {
         checkGpuEffects(mlt_service);
+        checkCpuEffects(mlt_service);
         checkUnlinkedFile(mlt_service);
 
         // Second pass: amend property values.
@@ -350,6 +354,12 @@ void MltXmlChecker::checkGpuEffects(const QString& mlt_service)
         m_needsGPU = true;
 }
 
+void MltXmlChecker::checkCpuEffects(const QString& mlt_service)
+{
+    if (mlt_service.startsWith("dynamictext") || mlt_service.startsWith("vidstab"))
+        m_needsCPU = true;
+}
+
 void MltXmlChecker::checkUnlinkedFile(const QString& mlt_service)
 {
     // Check for an unlinked file.
@@ -358,6 +368,8 @@ void MltXmlChecker::checkUnlinkedFile(const QString& mlt_service)
     if (!mlt_service.isEmpty() && mlt_service != "color" && mlt_service != "colour")
     // not a builtin luma wipe file
     if ((mlt_service != "luma" && mlt_service != "movit.luma_mix") || !baseName.startsWith('%'))
+    // not a Stabilize filter without Analyze results
+    if (baseName != "vidstab.trf")
     // not the generic <producer> resource
     if (baseName != "<producer>")
     // not a URL

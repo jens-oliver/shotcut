@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2011-2017 Meltytech, LLC
- * Author: Dan Dennedy <dan@dennedy.org>
+ * Copyright (c) 2011-2018 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,8 +41,8 @@ public slots:
     void pause();
     void stop();
     void seek(int position);
-    void rewind();
-    void fastForward();
+    void rewind(bool forceChangeDirection);
+    void fastForward(bool forceChangeDirection);
     void previous(int currentPosition);
     void next(int currentPosition);
     void setIn(int);
@@ -80,9 +79,10 @@ public:
     virtual void seek(int position);
     void refreshConsumer(bool scrubAudio = false);
     void saveXML(const QString& filename, Service* service = 0, bool withRelativePaths = true);
-    QString XML(Service* service = 0, bool withProfile = false);
+    QString XML(Service* service = 0, bool withProfile = false, bool withMetadata = false);
     int consumerChanged();
     void setProfile(const QString& profile_name);
+    void setAudioChannels(int audioChannels);
     QString resource() const;
     bool isSeekable(Mlt::Producer* p = 0) const;
     bool isClip() const;
@@ -90,13 +90,13 @@ public:
     bool isPlaylist() const;
     bool isMultitrack() const;
     bool isImageProducer(Service* service) const;
-    void rewind();
-    void fastForward();
+    void rewind(bool forceChangeDirection);
+    void fastForward(bool forceChangeDirection);
     void previous(int currentPosition);
     void next(int currentPosition);
     void setIn(int);
     void setOut(int);
-    void restart();
+    void restart(const QString& xml = "");
     void resetURL();
     QImage image(Frame *frame, int width, int height);
     QImage image(Mlt::Producer& producer, int frameNumber, int width, int height);
@@ -114,6 +114,9 @@ public:
         return m_filtersClipboard->is_valid() && m_filtersClipboard->filter_count() > 0;
     }
 
+    int audioChannels() const {
+        return m_audioChannels;
+    }
     Mlt::Repository* repository() const {
         return m_repo;
     }
@@ -121,10 +124,10 @@ public:
         return *m_profile;
     }
     Mlt::Producer* producer() const {
-        return m_producer;
+        return m_producer.data();
     }
     Mlt::Consumer* consumer() const {
-        return m_consumer;
+        return m_consumer.data();
     }
     const QString& URL() const {
         return m_url;
@@ -136,25 +139,32 @@ public:
         return m_savedProducer.data();
     }
     void setSavedProducer(Mlt::Producer* producer);
+    static Mlt::Filter* getFilter(const QString& name, Mlt::Service* service);
+    QString projectFolder() const { return m_projectFolder; }
+    void setProjectFolder(const QString& folderName);
 
 protected:
     Mlt::Repository* m_repo;
-    Mlt::Producer* m_producer;
-    Mlt::FilteredConsumer* m_consumer;
+    QScopedPointer<Mlt::Producer> m_producer;
+    QScopedPointer<Mlt::FilteredConsumer> m_consumer;
 
 private:
-    Mlt::Profile* m_profile;
-    Mlt::Filter* m_jackFilter;
+    QScopedPointer<Mlt::Profile> m_profile;
+    int m_audioChannels;
+    QScopedPointer<Mlt::Filter> m_jackFilter;
     QString m_url;
     double m_volume;
     TransportControl m_transportControl;
     QScopedPointer<Mlt::Producer> m_savedProducer;
     QScopedPointer<Mlt::Producer> m_filtersClipboard;
+    unsigned m_skipJackEvents;
+    QString m_projectFolder;
 
     static void on_jack_started(mlt_properties owner, void* object, mlt_position *position);
     void onJackStarted(int position);
     static void on_jack_stopped(mlt_properties owner, void* object, mlt_position *position);
     void onJackStopped(int position);
+    void stopJack();
 };
 
 } // namespace

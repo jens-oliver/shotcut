@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2014-2017 Meltytech, LLC
- * Author: Dan Dennedy <dan@dennedy.org>
+ * Copyright (c) 2014-2018 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +25,9 @@
 #include <QUrl>
 #include <QDesktopServices>
 #include <QMessageBox>
+#include <QMap>
+#include <MltProducer.h>
+#include "shotcut_mlt_properties.h"
 
 QString Util::baseName(const QString &filePath)
 {
@@ -66,6 +68,10 @@ void Util::showInFolder(const QString& path)
     args << "select POSIX file \"" + path + "\"";
     args << "-e";
     args << "end tell";
+#if !defined(QT_DEBUG)
+    args << "-e";
+    args << "return";
+#endif
     if (!QProcess::execute("/usr/bin/osascript", args))
         return;
 #endif
@@ -92,4 +98,107 @@ bool Util::warnIfNotWritable(const QString& filePath, QWidget* parent, const QSt
         }
     }
     return false;
+}
+
+QString Util::producerTitle(const Mlt::Producer& producer)
+{
+    QString result;
+    Mlt::Producer& p = const_cast<Mlt::Producer&>(producer);
+    if (!p.is_valid() || p.is_blank()) return result;
+    if (p.get(kShotcutTransitionProperty))
+        return QObject::tr("Transition");
+    if (p.get(kTrackNameProperty))
+        return QObject::tr("Track: %1").arg(QString::fromUtf8(p.get(kTrackNameProperty)));
+    if (tractor_type == p.type())
+        return QObject::tr("Master");
+    if (p.get(kShotcutCaptionProperty))
+        return QString::fromUtf8(p.get(kShotcutCaptionProperty));
+    if (p.get("resource"))
+        return Util::baseName(QString::fromUtf8(p.get("resource")));
+    return result;
+}
+
+QString Util::removeFileScheme(QUrl& url)
+{
+    QString path = url.url();
+    if (url.scheme() == "file")
+        path = url.url(QUrl::PreferLocalFile);
+    return path;
+}
+
+QStringList Util::sortedFileList(const QList<QUrl>& urls)
+{
+    QStringList result;
+    QMap<QString, QStringList> goproFiles;
+
+    // First look for GoPro main files.
+    foreach (QUrl url, urls) {
+        QFileInfo fi(removeFileScheme(url));
+        if (fi.baseName().size() == 8 && fi.suffix() == "MP4" && fi.baseName().startsWith("GOPR"))
+            goproFiles[fi.baseName().mid(4)] << fi.filePath();
+    }
+    // Then, look for GoPro split files.
+    foreach (QUrl url, urls) {
+        QFileInfo fi(removeFileScheme(url));
+        if (fi.baseName().size() == 8 && fi.suffix() == "MP4" && fi.baseName().startsWith("GP")) {
+            QString goproNumber = fi.baseName().mid(4);
+            // Only if there is a matching main GoPro file.
+            if (goproFiles.contains(goproNumber) && goproFiles[goproNumber].size())
+                goproFiles[goproNumber] << fi.filePath();
+        }
+    }
+    // Next, sort the GoPro files.
+    foreach (QString goproNumber, goproFiles.keys())
+        goproFiles[goproNumber].sort(Qt::CaseSensitive);
+    // Finally, build the list of all files.
+    // Add all the GoPro files first.
+    foreach (QStringList paths, goproFiles)
+        result << paths;
+    // Add all the non-GoPro files.
+    foreach (QUrl url, urls) {
+        QFileInfo fi(removeFileScheme(url));
+        if (fi.baseName().size() == 8 && fi.suffix() == "MP4" &&
+                (fi.baseName().startsWith("GOPR") || fi.baseName().startsWith("GP"))) {
+            QString goproNumber = fi.baseName().mid(4);
+            if (goproFiles.contains(goproNumber) && goproFiles[goproNumber].contains(fi.filePath()))
+                continue;
+        }
+        result << fi.filePath();
+    }
+    return result;
+}
+
+int Util::coerceMultiple(int value, int multiple)
+{
+    return (value + multiple - 1) / multiple * multiple;
+}
+
+QList<QUrl> Util::expandDirectories(const QList<QUrl>& urls)
+{
+    QList<QUrl> result;
+    foreach (QUrl url, urls) {
+        QString path = Util::removeFileScheme(url);
+        QFileInfo fi(path);
+        if (fi.isDir()) {
+            QDir dir(path);
+            foreach (QFileInfo fi, dir.entryInfoList(QDir::Files | QDir::Readable, QDir::Name))
+                result << fi.filePath();
+        } else {
+            result << url;
+        }
+    }
+    return result;
+}
+
+uint Util::versionStringToUInt(const QString& s)
+{
+    // This only accepts up to 3 period-delimited fields where each
+    // field value <= 999.
+    uint version = 0;
+    QStringList list = s.split('.').mid(0, 3);
+    QList<QString>::const_reverse_iterator i;
+    uint factor = 1;
+    for (i = list.crbegin(); i != list.crend(); ++i, factor *= 1000)
+         version += qMin(i->toUInt(), 999U) * factor;
+    return version;
 }

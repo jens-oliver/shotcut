@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2012-2015 Meltytech, LLC
- * Author: Dan Dennedy <dan@dennedy.org>
+ * Copyright (c) 2012-2018 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,11 +24,9 @@ class EncodeJob : public MeltJob
 {
     Q_OBJECT
 public:
-    EncodeJob(const QString& name, const QString& xml);
+    EncodeJob(const QString& name, const QString& xml, int frameRateNum, int frameRateDen);
 
 private slots:
-    void onOpenTiggered();
-    void onShowFolderTriggered();
     void onVideoQualityTriggered();
 };
 

@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2013-2016 Meltytech, LLC
- * Author: Dan Dennedy <dan@dennedy.org>
+ * Copyright (c) 2013-2018 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,7 +33,7 @@ Rectangle {
     function setZoom(value) {
         toolbar.scaleSlider.value = value
         for (var i = 0; i < tracksRepeater.count; i++)
-            tracksRepeater.itemAt(i).redrawWaveforms()
+            tracksRepeater.itemAt(i).redrawWaveforms(false)
     }
 
     function adjustZoom(by) {
@@ -51,15 +50,6 @@ Rectangle {
 
     function resetZoom() {
         setZoom(1.0)
-    }
-
-    function zoomByWheel(wheel) {
-        if (wheel.modifiers & Qt.ControlModifier) {
-            adjustZoom(wheel.angleDelta.y / 720)
-        }
-        if (wheel.modifiers & Qt.ShiftModifier) {
-            multitrack.trackHeight = Math.max(30, multitrack.trackHeight + wheel.angleDelta.y / 5)
-        }
     }
 
     function makeTracksTaller() {
@@ -80,13 +70,16 @@ Rectangle {
         cornerstone.selected = true
     }
 
+    function trackAt(index) {
+        return tracksRepeater.itemAt(index)
+    }
+
     property int headerWidth: 140
     property int currentTrack: 0
     property color selectedTrackColor: Qt.rgba(0.8, 0.8, 0, 0.3);
     property alias trackCount: tracksRepeater.count
     property bool stopScrolling: false
     property color shotcutBlue: Qt.rgba(23/255, 92/255, 118/255, 1.0)
-    property alias ripple: toolbar.ripple
 
     onCurrentTrackChanged: timeline.selection = []
 
@@ -94,24 +87,24 @@ Rectangle {
         anchors.fill: parent
         acceptedButtons: Qt.RightButton
         onClicked: menu.popup()
-        onWheel: zoomByWheel(wheel)
+        onWheel: Logic.onMouseWheel(wheel)
     }
 
     DropArea {
         anchors.fill: parent
         onEntered: {
-            if (drag.formats.indexOf('application/mlt+xml') >= 0)
+            if (drag.formats.indexOf('application/vnd.mlt+xml') >= 0)
                 drag.acceptProposedAction()
         }
         onExited: Logic.dropped()
         onPositionChanged: {
-            if (drag.formats.indexOf('application/mlt+xml') >= 0)
+            if (drag.formats.indexOf('application/vnd.mlt+xml') >= 0)
                 Logic.dragging(drag, drag.text)
         }
         onDropped: {
-            if (drop.formats.indexOf('application/mlt+xml') >= 0) {
+            if (drop.formats.indexOf('application/vnd.mlt+xml') >= 0) {
                 if (currentTrack >= 0) {
-                    Logic.acceptDrop(drop.getDataAsString('application/mlt+xml'))
+                    Logic.acceptDrop(drop.getDataAsString('application/vnd.mlt+xml'))
                     drop.acceptProposedAction()
                 }
             }
@@ -192,6 +185,7 @@ Rectangle {
                             isLocked: model.locked
                             isVideo: !model.audio
                             isFiltered: model.filtered
+                            isBottomVideo: model.isBottomVideo
                             width: headerWidth
                             height: Logic.trackHeight(model.audio)
                             selected: false
@@ -269,9 +263,12 @@ Rectangle {
                     width: root.width - headerWidth
                     height: root.height - ruler.height - toolbar.height
         
-                    Item {
+                    MouseArea {
                         width: tracksContainer.width + headerWidth
                         height: trackHeaders.height + 30 // 30 is padding
+                        acceptedButtons: Qt.NoButton
+                        onWheel: Logic.onMouseWheel(wheel)
+
                         Column {
                             // These make the striped background for the tracks.
                             // It is important that these are not part of the track visual hierarchy;
@@ -337,7 +334,7 @@ Rectangle {
         Text {
             anchors.fill: parent
             anchors.leftMargin: 100
-            text: toolbar.ripple? qsTr('Insert') : qsTr('Overwrite')
+            text: settings.timelineRipple? qsTr('Insert') : qsTr('Overwrite')
             style: Text.Outline
             styleColor: 'white'
             font.pixelSize: Math.min(Math.max(parent.height * 0.8, 15), 30)
@@ -407,7 +404,7 @@ Rectangle {
         }
         MenuItem {
             text: qsTr('Add Video Track')
-            shortcut: 'Ctrl+Y'
+            shortcut: 'Ctrl+I'
             onTriggered: timeline.addVideoTrack();
         }
         MenuItem {
@@ -421,9 +418,14 @@ Rectangle {
         MenuSeparator {}
         MenuItem {
             text: qsTr("Ripple All Tracks")
+            shortcut: 'Ctrl+Alt+R'
             checkable: true
             checked: settings.timelineRippleAllTracks
             onTriggered: settings.timelineRippleAllTracks = checked
+        }
+        MenuItem {
+            text: qsTr('Copy Timeline to Source')
+            onTriggered: timeline.copyToSource()
         }
         MenuSeparator {}
         MenuItem {
@@ -438,6 +440,11 @@ Rectangle {
             onTriggered: makeTracksTaller()
         }
         MenuItem {
+            text: qsTr('Reset Track Height')
+            shortcut: 'Ctrl+0'
+            onTriggered: multitrack.trackHeight = 50
+        }
+        MenuItem {
             text: qsTr('Show Audio Waveforms')
             checkable: true
             checked: settings.timelineShowWaveforms
@@ -449,7 +456,7 @@ Rectangle {
                             tracksRepeater.itemAt(i).redrawWaveforms()
                     } else {
                         settings.timelineShowWaveforms = checked
-                        for (var i = 0; i < tracksRepeater.count; i++)
+                        for (i = 0; i < tracksRepeater.count; i++)
                             tracksRepeater.itemAt(i).remakeWaveforms(false)
                     }
                 } else {
@@ -462,6 +469,12 @@ Rectangle {
             checkable: true
             checked: settings.timelineShowThumbnails
             onTriggered: settings.timelineShowThumbnails = checked
+        }
+        MenuItem {
+            id: propertiesMenuItem
+            visible: false
+            text: qsTr('Properties')
+            onTriggered: timeline.openProperties()
         }
         MenuItem {
             text: qsTr('Reload')
@@ -486,6 +499,7 @@ Rectangle {
             rootIndex: trackDelegateModel.modelIndex(index)
             height: Logic.trackHeight(audio)
             isAudio: audio
+            isMute: mute
             isCurrentTrack: currentTrack === index
             timeScale: multitrack.scaleFactor
             selection: timeline.selection
@@ -513,7 +527,7 @@ Rectangle {
                 // Show distance moved as time in a "bubble" help.
                 var track = tracksRepeater.itemAt(clip.trackIndex)
                 var delta = Math.round((clip.x - clip.originalX) / multitrack.scaleFactor)
-                var s = timeline.timecode(Math.abs(delta))
+                var s = application.timecode(Math.abs(delta))
                 // remove leading zeroes
                 if (s.substring(0, 3) === '00:')
                     s = s.substring(3)
@@ -565,6 +579,7 @@ Rectangle {
             var selectedTrack = timeline.selectedTrack()
             for (var i = 0; i < trackHeaderRepeater.count; i++)
                 trackHeaderRepeater.itemAt(i).selected = (i === selectedTrack)
+            propertiesMenuItem.visible = (cornerstone.selected || (selectedTrack >= 0 && selectedTrack < trackHeaderRepeater.count))
         }
     }
 

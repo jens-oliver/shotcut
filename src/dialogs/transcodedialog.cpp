@@ -21,11 +21,14 @@
 
 TranscodeDialog::TranscodeDialog(const QString& message, QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::TranscodeDialog)
+    ui(new Ui::TranscodeDialog),
+    m_format(1),
+    m_isChecked(false)
 {
     ui->setupUi(this);
     setWindowTitle(tr("Convert to Edit-friendly..."));
     ui->messageLabel->setText(message);
+    ui->checkBox->hide();
     on_horizontalSlider_valueChanged(1);
 }
 
@@ -34,11 +37,16 @@ TranscodeDialog::~TranscodeDialog()
     delete ui;
 }
 
+void TranscodeDialog::showCheckBox()
+{
+    ui->checkBox->show();
+}
+
 void TranscodeDialog::on_horizontalSlider_valueChanged(int position)
 {
     switch (position) {
     case 0:
-        ui->formatLabel->setText(tr("Lossy: I-frame–only H.264/AAC MP4"));
+        ui->formatLabel->setText(tr("Lossy: I-frame–only H.264/AC-3 MP4"));
         break;
     case 1:
         ui->formatLabel->setText(tr("Intermediate: ProRes/ALAC MOV"));
@@ -48,4 +56,9 @@ void TranscodeDialog::on_horizontalSlider_valueChanged(int position)
         break;
     }
     m_format = position;
+}
+
+void TranscodeDialog::on_checkBox_clicked(bool checked)
+{
+    m_isChecked = checked;
 }

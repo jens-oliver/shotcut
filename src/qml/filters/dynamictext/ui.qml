@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2014-2015 Meltytech, LLC
- * Author: Dan Dennedy <dan@dennedy.org>
+ * Copyright (c) 2014-2018 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,80 +25,183 @@ Item {
     property string rectProperty: 'geometry'
     property string valignProperty: 'valign'
     property string halignProperty: 'halign'
-    property rect filterRect: filter.getRect(rectProperty)
-    property var _locale: Qt.locale(application.numericLocale)
+    property string useFontSizeProperty: 'shotcut:usePointSize'
+    property string pointSizeProperty: 'shotcut:pointSize'
+    property rect filterRect
+    property string startValue: '_shotcut:startValue'
+    property string middleValue: '_shotcut:middleValue'
+    property string endValue:  '_shotcut:endValue'
+
     width: 500
     height: 350
 
     Component.onCompleted: {
+        filter.blockSignals = true
+        filter.set(middleValue, Qt.rect(0, 0, profile.width, profile.height))
+        filter.set(startValue, Qt.rect(0, 0, profile.width, profile.height))
+        filter.set(endValue, Qt.rect(0, 0, profile.width, profile.height))
         if (filter.isNew) {
+            var presetParams = preset.parameters.slice()
+            var index = presetParams.indexOf('argument')
+            if (index > -1)
+                presetParams.splice(index, 1)
+
             if (application.OS === 'Windows')
                 filter.set('family', 'Verdana')
             filter.set('fgcolour', '#ffffffff')
             filter.set('bgcolour', '#00000000')
             filter.set('olcolour', '#ff000000')
-            filter.set('weight', 500)
+            filter.set('weight', 10 * Font.Normal)
+            filter.set('style', 'normal')
+            filter.set(useFontSizeProperty, false)
+            filter.set('size', profile.height)
 
-            filter.set(rectProperty,   '0/50%:50%x50%')
+            filter.set(rectProperty,   '0%/50%:50%x50%')
             filter.set(valignProperty, 'bottom')
             filter.set(halignProperty, 'left')
-            filter.savePreset(preset.parameters, qsTr('Bottom Left'))
+            filter.savePreset(presetParams, qsTr('Bottom Left'))
 
             filter.set(rectProperty,   '50%/50%:50%x50%')
             filter.set(valignProperty, 'bottom')
             filter.set(halignProperty, 'right')
-            filter.savePreset(preset.parameters, qsTr('Bottom Right'))
+            filter.savePreset(presetParams, qsTr('Bottom Right'))
 
-            filter.set(rectProperty,   '0/0:50%x50%')
+            filter.set(rectProperty,   '0%/0%:50%x50%')
             filter.set(valignProperty, 'top')
             filter.set(halignProperty, 'left')
-            filter.savePreset(preset.parameters, qsTr('Top Left'))
+            filter.savePreset(presetParams, qsTr('Top Left'))
 
-            filter.set(rectProperty,   '50%/0:50%x50%')
+            filter.set(rectProperty,   '50%/0%:50%x50%')
             filter.set(valignProperty, 'top')
             filter.set(halignProperty, 'right')
-            filter.savePreset(preset.parameters, qsTr('Top Right'))
+            filter.savePreset(presetParams, qsTr('Top Right'))
 
-            filter.set(rectProperty,   '0/76%:100%x14%')
+            filter.set(rectProperty,   '0%/76%:100%x14%')
             filter.set(valignProperty, 'bottom')
             filter.set(halignProperty, 'center')
-            filter.savePreset(preset.parameters, qsTr('Lower Third'))
+            filter.savePreset(presetParams, qsTr('Lower Third'))
 
-            filter.set(rectProperty, '0/0:100%x100%')
-            filter.set(valignProperty, 'bottom')
-            filter.set(halignProperty, 'center')
-            filter.set('size', filterRect.height)
-            filter.savePreset(preset.parameters)
+            // Add some animated presets.
+            filter.animateIn = Math.round(profile.fps)
+            filter.set(rectProperty,   '0=-100%/0%:100%x100%; :1.0=0%/0%:100%x100%')
+            filter.savePreset(presetParams.concat('shotcut:animIn'), qsTr('Slide In From Left'))
+            filter.set(rectProperty,   '0=100%/0%:100%x100%; :1.0=0%/0%:100%x100%')
+            filter.savePreset(presetParams.concat('shotcut:animIn'), qsTr('Slide In From Right'))
+            filter.set(rectProperty,   '0=0%/-100%:100%x100%; :1.0=0%/0%:100%x100%')
+            filter.savePreset(presetParams.concat('shotcut:animIn'), qsTr('Slide In From Top'))
+            filter.set(rectProperty,   '0=0%/100%:100%x100%; :1.0=0%/0%:100%x100%')
+            filter.savePreset(presetParams.concat('shotcut:animIn'), qsTr('Slide In From Bottom'))
+            filter.animateIn = 0
+            filter.animateOut = Math.round(profile.fps)
+            filter.set(rectProperty,   ':-1.0=0%/0%:100%x100%; -1=-100%/0%:100%x100%')
+            filter.savePreset(presetParams.concat('shotcut:animOut'), qsTr('Slide Out Left'))
+            filter.set(rectProperty,   ':-1.0=0%/0%:100%x100%; -1=100%/0%:100%x100%')
+            filter.savePreset(presetParams.concat('shotcut:animOut'), qsTr('Slide Out Right'))
+            filter.set(rectProperty,   ':-1.0=0%/0%:100%x100%; -1=0%/-100%:100%x100%')
+            filter.savePreset(presetParams.concat('shotcut:animOut'), qsTr('Slide Out Top'))
+            filter.set(rectProperty,   ':-1.0=0%/0%:100%x100%; -1=0%/100%:100%x100%')
+            filter.savePreset(presetParams.concat('shotcut:animOut'), qsTr('Slide Out Bottom'))
+            filter.animateOut = 0
+            filter.animateIn = filter.duration
+            filter.set(rectProperty,   '0=0%/0%:100%x100%; -1=-5%/-5%:110%x110%')
+            filter.savePreset(presetParams.concat('shotcut:animIn'), qsTr('Slow Zoom In'))
+            filter.set(rectProperty,   '0=-5%/-5%:110%x110%; -1=0%/0%:100%x100%')
+            filter.savePreset(presetParams.concat('shotcut:animIn'), qsTr('Slow Zoom Out'))
+            filter.set(rectProperty,   '0=-5%/-5%:110%x110%; -1=-10%/-5%:110%x110%')
+            filter.savePreset(presetParams.concat('shotcut:animIn'), qsTr('Slow Pan Left'))
+            filter.set(rectProperty,   '0=-5%/-5%:110%x110%; -1=0%/-5%:110%x110%')
+            filter.savePreset(presetParams.concat('shotcut:animIn'), qsTr('Slow Pan Right'))
+            filter.set(rectProperty,   '0=-5%/-5%:110%x110%; -1=-5%/-10%:110%x110%')
+            filter.savePreset(presetParams.concat('shotcut:animIn'), qsTr('Slow Pan Up'))
+            filter.set(rectProperty,   '0=-5%/-5%:110%x110%; -1=-5%/0%:110%x110%')
+            filter.savePreset(presetParams.concat('shotcut:animIn'), qsTr('Slow Pan Down'))
+            filter.set(rectProperty,   '0=0%/0%:100%x100%; -1=-10%/-10%:110%x110%')
+            filter.savePreset(presetParams.concat('shotcut:animIn'), qsTr('Slow Zoom In, Pan Up Left'))
+            filter.set(rectProperty,   '0=0%/0%:100%x100%; -1=0%/0%:110%x110%')
+            filter.savePreset(presetParams.concat('shotcut:animIn'), qsTr('Slow Zoom In, Pan Down Right'))
+            filter.set(rectProperty,   '0=-10%/0%:110%x110%; -1=0%/0%:100%x100%')
+            filter.savePreset(presetParams.concat('shotcut:animIn'), qsTr('Slow Zoom Out, Pan Up Right'))
+            filter.set(rectProperty,   '0=0%/-10%:110%x110%; -1=0%/0%:100%x100%')
+            filter.savePreset(presetParams.concat('shotcut:animIn'), qsTr('Slow Zoom Out, Pan Down Left'))
+            filter.animateIn = 0
+            filter.resetProperty(rectProperty)
+
+            // Add default preset.
+            filter.set(rectProperty, '0%/0%:100%x100%')
+            filter.savePreset(presetParams)
+        } else {
+            filter.set(middleValue, filter.getRect(rectProperty, filter.animateIn + 1))
+            if (filter.animateIn > 0)
+                filter.set(startValue, filter.getRect(rectProperty, 0))
+            if (filter.animateOut > 0)
+                filter.set(endValue, filter.getRect(rectProperty, filter.duration - 1))
         }
+        filter.blockSignals = false
         setControls()
+        setKeyframedControls()
+        if (filter.isNew)
+            filter.set(rectProperty, filter.getRect(rectProperty))
     }
 
-    function setFilter() {
-        var x = parseFloat(rectX.text)
-        var y = parseFloat(rectY.text)
-        var w = parseFloat(rectW.text)
-        var h = parseFloat(rectH.text)
-        if (x !== filterRect.x ||
-            y !== filterRect.y ||
-            w !== filterRect.width ||
-            h !== filterRect.height) {
-            filterRect.x = x
-            filterRect.y = y
-            filterRect.width = w
-            filterRect.height = h
-            filter.set(rectProperty, '%1%/%2%:%3%x%4%'
-                       .arg((x / profile.width * 100).toLocaleString(_locale))
-                       .arg((y / profile.height * 100).toLocaleString(_locale))
-                       .arg((w / profile.width * 100).toLocaleString(_locale))
-                       .arg((h / profile.height * 100).toLocaleString(_locale)))
+    function getPosition() {
+        return Math.max(producer.position - (filter.in - producer.in), 0)
+    }
+
+    function updateFilter(position) {
+        if (position !== null) {
+            filter.blockSignals = true
+            if (position <= 0 && filter.animateIn > 0)
+                filter.set(startValue, filterRect)
+            else if (position >= filter.duration - 1 && filter.animateOut > 0)
+                filter.set(endValue, filterRect)
+            else
+                filter.set(middleValue, filterRect)
+            filter.blockSignals = false
         }
+
+        if (filter.animateIn > 0 || filter.animateOut > 0) {
+            filter.resetProperty(rectProperty)
+            positionKeyframesButton.checked = false
+            if (filter.animateIn > 0) {
+                filter.set(rectProperty, filter.getRect(startValue), 1.0, 0)
+                filter.set(rectProperty, filter.getRect(middleValue), 1.0, filter.animateIn - 1)
+            }
+            if (filter.animateOut > 0) {
+                filter.set(rectProperty, filter.getRect(middleValue), 1.0, filter.duration - filter.animateOut)
+                filter.set(rectProperty, filter.getRect(endValue), 1.0, filter.duration - 1)
+            }
+        } else if (!positionKeyframesButton.checked) {
+            filter.resetProperty(rectProperty)
+            filter.set(rectProperty, filter.getRect(middleValue))
+        } else if (position !== null) {
+            filter.set(rectProperty, filterRect, 1.0, position)
+        }
+    }
+
+    function getPointSize() {
+        var pointSize = parseInt(filter.get(pointSizeProperty))
+        if (!pointSize) {
+            var ratio = fontDialog.font.pointSize / fontDialog.font.pixelSize
+            pointSize = filter.get('size') * ratio
+        }
+        return pointSize
+    }
+
+    function refreshFontButton() {
+        var s = filter.get('family')
+        if (filter.getDouble('weight') > 10 * Font.Medium)
+            s += ' ' + qsTr('Bold')
+        if (filter.get('style') === 'italic')
+            s += ' ' + qsTr('Italic')
+        if (parseInt(filter.get(useFontSizeProperty)))
+            s += ' ' + getPointSize()
+        fontButton.text = s
     }
 
     function setControls() {
         textArea.text = filter.get('argument')
         fgColor.value = filter.get('fgcolour')
         fontButton.text = filter.get('family')
-        weightCombo.currentIndex = weightCombo.valueToIndex()
         outlineColor.value = filter.get('olcolour')
         outlineSpinner.value = filter.getDouble('outline')
         bgColor.value = filter.get('bgcolour')
@@ -118,6 +220,31 @@ Item {
             middleRadioButton.checked = true
         else if (align === 'bottom')
             bottomRadioButton.checked = true
+        fontDialog.font = Qt.font({
+            family: filter.get('family'),
+            pointSize: getPointSize(),
+            italic: filter.get('style') === 'italic',
+            weight: filter.getDouble('weight') / 10
+        })
+        fontSizeCheckBox.checked = parseInt(filter.get(useFontSizeProperty))
+        refreshFontButton()
+    }
+
+    function setKeyframedControls() {
+        var position = getPosition()
+        var newValue = filter.getRect(rectProperty, position)
+        if (filterRect !== newValue) {
+            filterRect = newValue
+            rectX.text = filterRect.x.toFixed()
+            rectY.text = filterRect.y.toFixed()
+            rectW.text = filterRect.width.toFixed()
+            rectH.text = filterRect.height.toFixed()
+        }
+        var enabled = position <= 0 || (position >= (filter.animateIn - 1) && position <= (filter.duration - filter.animateOut)) || position >= (filter.duration - 1)
+        rectX.enabled = enabled
+        rectY.enabled = enabled
+        rectW.enabled = enabled
+        rectH.enabled = enabled
     }
 
     ExclusiveGroup { id: sizeGroup }
@@ -125,7 +252,7 @@ Item {
     ExclusiveGroup { id: valignGroup }
 
     GridLayout {
-        columns: 5
+        columns: 6
         anchors.fill: parent
         anchors.margins: 8
 
@@ -135,10 +262,24 @@ Item {
         }
         Preset {
             id: preset
-            parameters: [rectProperty, halignProperty, valignProperty, 'argument', 'size',
-            'fgcolour', 'family', 'weight', 'olcolour', 'outline', 'bgcolour', 'pad']
-            Layout.columnSpan: 4
-            onPresetSelected: setControls()
+            parameters: [rectProperty, halignProperty, valignProperty, 'argument', 'size', 'style',
+            'fgcolour', 'family', 'weight', 'olcolour', 'outline', 'bgcolour', 'pad', useFontSizeProperty]
+            Layout.columnSpan: 5
+            onBeforePresetLoaded: {
+                filter.resetProperty(rectProperty)
+            }
+            onPresetSelected: {
+                setControls()
+                setKeyframedControls()
+                positionKeyframesButton.checked = filter.keyframeCount(rectProperty) > 0 && filter.animateIn <= 0 && filter.animateOut <= 0
+                filter.blockSignals = true
+                filter.set(middleValue, filter.getRect(rectProperty, filter.animateIn + 1))
+                if (filter.animateIn > 0)
+                    filter.set(startValue, filter.getRect(rectProperty, 0))
+                if (filter.animateOut > 0)
+                    filter.set(endValue, filter.getRect(rectProperty, filter.duration - 1))
+                filter.blockSignals = false
+            }
         }
 
         Label {
@@ -147,7 +288,7 @@ Item {
         }
         TextArea {
             id: textArea
-            Layout.columnSpan: 4
+            Layout.columnSpan: 5
             textFormat: TextEdit.PlainText
             wrapMode: TextEdit.NoWrap
             Layout.minimumHeight: 40
@@ -162,6 +303,8 @@ Item {
                     text = text.substring(0, maxLength)
                     cursorPosition = maxLength
                 }
+                if (!parseInt(filter.get(useFontSizeProperty)))
+                    filter.set('size', profile.height / text.split('\n').length)
                 filter.set('argument', text)
             }
         }
@@ -171,7 +314,7 @@ Item {
             Layout.alignment: Qt.AlignRight
         }
         RowLayout {
-            Layout.columnSpan: 4
+            Layout.columnSpan: 5
             Button {
                 text: qsTr('# (Hash sign)')
                 onClicked: textArea.insert(textArea.cursorPosition, '\\#')
@@ -205,33 +348,44 @@ Item {
             onValueChanged: filter.set('fgcolour', value)
         }
         RowLayout {
-            Layout.columnSpan: 3
+            Layout.columnSpan: 4
             Button {
                 id: fontButton
                 onClicked: {
-                    fontDialog.font = Qt.font({ family: filter.get('family'), pointSize: 24, weight: Font.Normal })
+                    fontDialog.font.pointSize = getPointSize()
                     fontDialog.open()
                 }
                 FontDialog {
                     id: fontDialog
                     title: "Please choose a font"
-                    onFontChanged: filter.set('family', font.family)
-                    onAccepted: fontButton.text = font.family
-                    onRejected: filter.set('family', fontButton.text)
+                    property string fontFamily: ''
+                    onFontChanged: {
+                        filter.set('family', font.family)
+                        filter.set('weight', 10 * font.weight )
+                        filter.set('style', font.italic? 'italic' : 'normal' )
+                        if (parseInt(filter.get(useFontSizeProperty))) {
+                            filter.set('size', font.pixelSize)
+                            filter.set(pointSizeProperty, font.pointSize)
+                        }
+                        refreshFontButton()
+                    }
+                    onAccepted: fontFamily = font.family
+                    onRejected: filter.set('family', fontFamily)
                 }
             }
-            ComboBox {
-                id: weightCombo
-                model: [qsTr('Normal'), qsTr('Bold'), qsTr('Light', 'thin font stroke')]
-                property var values: [Font.Normal, Font.Bold, Font.Light]
-                function valueToIndex() {
-                    var w = filter.getDouble('weight')
-                    for (var i = 0; i < values.length; ++i)
-                        if (values[i] === w) break;
-                    if (i === values.length) i = 0;
-                    return i;
+            CheckBox {
+                id: fontSizeCheckBox
+                text: qsTr('Use font size')
+                onCheckedChanged: {
+                    filter.set(useFontSizeProperty, checked)
+                    if (checked) {
+                        filter.set('size', fontDialog.font.pixelSize)
+                        filter.set(pointSizeProperty, fontDialog.font.pointSize)
+                    } else {
+                        filter.set('size', profile.height / text.split('\n').length)
+                    }
+                    refreshFontButton()
                 }
-                onActivated: filter.set('weight', 10 * values[index])
             }
         }
 
@@ -252,7 +406,7 @@ Item {
         SpinBox {
             id: outlineSpinner
             Layout.minimumWidth: 50
-            Layout.columnSpan: 2
+            Layout.columnSpan: 3
             minimumValue: 0
             maximumValue: 30
             decimals: 0
@@ -276,7 +430,7 @@ Item {
         SpinBox {
             id: padSpinner
             Layout.minimumWidth: 50
-            Layout.columnSpan: 2
+            Layout.columnSpan: 3
             minimumValue: 0
             maximumValue: 100
             decimals: 0
@@ -288,41 +442,81 @@ Item {
             Layout.alignment: Qt.AlignRight
         }
         RowLayout {
-            Layout.columnSpan: 4
+            Layout.columnSpan: 3
             TextField {
                 id: rectX
-                text: filterRect.x
                 horizontalAlignment: Qt.AlignRight
-                onEditingFinished: setFilter()
+                onEditingFinished: if (filterRect.x !== parseFloat(text)) {
+                    filterRect.x = parseFloat(text)
+                    updateFilter(getPosition())
+                }
             }
             Label { text: ',' }
             TextField {
                 id: rectY
-                text: filterRect.y
                 horizontalAlignment: Qt.AlignRight
-                onEditingFinished: setFilter()
+                onEditingFinished: if (filterRect.y !== parseFloat(text)) {
+                    filterRect.y = parseFloat(text)
+                    updateFilter(getPosition())
+                }
             }
         }
+        UndoButton {
+            onClicked: {
+                rectX.text = rectY.text = 0
+                filterRect.x = filterRect.y = 0
+                updateFilter(getPosition())
+            }
+        }
+        KeyframesButton {
+            id: positionKeyframesButton
+            checked: filter.keyframeCount(rectProperty) > 0 && filter.animateIn <= 0 && filter.animateOut <= 0
+            onToggled: {
+                if (checked) {
+                    filter.clearSimpleAnimation(rectProperty)
+                    filter.set(rectProperty, filterRect, 1.0, getPosition())
+                } else {
+                    filter.resetProperty(rectProperty)
+                    filter.set(rectProperty, filterRect)
+                }
+                checked = filter.keyframeCount(rectProperty) > 0 && filter.animateIn <= 0 && filter.animateOut <= 0
+            }
+        }
+
         Label {
             text: qsTr('Size')
             Layout.alignment: Qt.AlignRight
         }
         RowLayout {
-            Layout.columnSpan: 4
+            Layout.columnSpan: 3
             TextField {
                 id: rectW
-                text: filterRect.width
                 horizontalAlignment: Qt.AlignRight
-                onEditingFinished: setFilter()
+                onEditingFinished: if (filterRect.width !== parseFloat(text)) {
+                    filterRect.width = parseFloat(text)
+                    updateFilter(getPosition())
+                }
             }
             Label { text: 'x' }
             TextField {
                 id: rectH
-                text: filterRect.height
                 horizontalAlignment: Qt.AlignRight
-                onEditingFinished: setFilter()
+                onEditingFinished: if (filterRect.height !== parseFloat(text)) {
+                    filterRect.height = parseFloat(text)
+                    updateFilter(getPosition())
+                }
             }
         }
+        UndoButton {
+            onClicked: {
+                rectW.text = profile.width
+                rectH.text = profile.height
+                filterRect.width = profile.width
+                filterRect.height = profile.height
+                updateFilter(getPosition())
+            }
+        }
+        Item { Layout.fillWidth: true }
 
         Label {
             text: qsTr('Horizontal fit')
@@ -346,6 +540,12 @@ Item {
             exclusiveGroup: halignGroup
             onClicked: filter.set(halignProperty, 'right')
         }
+        UndoButton {
+            onClicked: {
+                centerRadioButton.checked = true
+                filter.set(halignProperty, 'center')
+            }
+        }
         Item { Layout.fillWidth: true }
 
         Label {
@@ -360,7 +560,7 @@ Item {
         }
         RadioButton {
             id: middleRadioButton
-            text: qsTr('Middle')
+            text: qsTr('Middle', 'Text video filter')
             exclusiveGroup: valignGroup
             onClicked: filter.set(valignProperty, 'middle')
         }
@@ -370,6 +570,12 @@ Item {
             exclusiveGroup: valignGroup
             onClicked: filter.set(valignProperty, 'bottom')
         }
+        UndoButton {
+            onClicked: {
+                bottomRadioButton.checked = true
+                filter.set(valignProperty, 'bottom')
+            }
+        }
         Item { Layout.fillWidth: true }
 
         Item { Layout.fillHeight: true }
@@ -377,11 +583,15 @@ Item {
 
     Connections {
         target: filter
-        onChanged: {
-            var newValue = filter.getRect(rectProperty)
-            if (filterRect !== newValue)
-                filterRect = newValue
-        }
+        onChanged: setKeyframedControls()
+        onInChanged: updateFilter(null)
+        onOutChanged: updateFilter(null)
+        onAnimateInChanged: updateFilter(null)
+        onAnimateOutChanged: updateFilter(null)
+    }
+
+    Connections {
+        target: producer
+        onPositionChanged: setKeyframedControls()
     }
 }
-

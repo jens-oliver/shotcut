@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2013-2017 Meltytech, LLC
- * Author: Dan Dennedy <dan@dennedy.org>
+ * Copyright (c) 2013-2018 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,21 +24,19 @@
 static const QString APP_DATA_DIR_KEY("appdatadir");
 static const QString SHOTCUT_INI_FILENAME("/shotcut.ini");
 static QScopedPointer<ShotcutSettings> instance;
+static QString appDataForSession;
 
 ShotcutSettings &ShotcutSettings::singleton()
 {
     if (!instance) {
-        instance.reset(new ShotcutSettings);
-        if (instance->settings.value(APP_DATA_DIR_KEY).isValid()
-            && QFile::exists(instance->settings.value(APP_DATA_DIR_KEY).toString() + SHOTCUT_INI_FILENAME) )
-            instance.reset(new ShotcutSettings(instance->settings.value(APP_DATA_DIR_KEY).toString()));
-        LOG_DEBUG() << "language" << instance->language();
-        LOG_DEBUG() << "deinterlacer" << instance->playerDeinterlacer();
-        LOG_DEBUG() << "external monitor" << instance->playerExternal();
-        LOG_DEBUG() << "GPU processing" << instance->playerGPU();
-        LOG_DEBUG() << "interpolation" << instance->playerInterpolation();
-        LOG_DEBUG() << "video mode" << instance->playerProfile();
-        LOG_DEBUG() << "realtime" << instance->playerRealtime();
+        if (appDataForSession.isEmpty()) {
+            instance.reset(new ShotcutSettings);
+            if (instance->settings.value(APP_DATA_DIR_KEY).isValid()
+                && QFile::exists(instance->settings.value(APP_DATA_DIR_KEY).toString() + SHOTCUT_INI_FILENAME) )
+                instance.reset(new ShotcutSettings(instance->settings.value(APP_DATA_DIR_KEY).toString()));
+        } else {
+            instance.reset(new ShotcutSettings(appDataForSession));
+        }
     }
     return *instance;
 }
@@ -51,9 +48,24 @@ ShotcutSettings::ShotcutSettings(const QString& appDataLocation)
 {
 }
 
+void ShotcutSettings::log()
+{
+    LOG_DEBUG() << "language" << language();
+    LOG_DEBUG() << "deinterlacer" << playerDeinterlacer();
+    LOG_DEBUG() << "external monitor" << playerExternal();
+    LOG_DEBUG() << "GPU processing" << playerGPU();
+    LOG_DEBUG() << "interpolation" << playerInterpolation();
+    LOG_DEBUG() << "video mode" << playerProfile();
+    LOG_DEBUG() << "realtime" << playerRealtime();
+    LOG_DEBUG() << "audio channels" << playerAudioChannels();
+#ifdef Q_OS_WIN
+    LOG_DEBUG() << "display method" << drawMethod();
+#endif
+}
+
 QString ShotcutSettings::language() const
 {
-    return settings.value("language", QLocale::system().name()).toString();
+    return settings.value("language", QLocale().name()).toString();
 }
 
 void ShotcutSettings::setLanguage(const QString& s)
@@ -100,7 +112,10 @@ QStringList ShotcutSettings::recent() const
 
 void ShotcutSettings::setRecent(const QStringList& ls)
 {
-    settings.setValue("recent", ls);
+    if (ls.isEmpty())
+        settings.remove("recent");
+    else if (!clearRecent())
+        settings.setValue("recent", ls);
 }
 
 QString ShotcutSettings::theme() const
@@ -194,24 +209,68 @@ void ShotcutSettings::setEncodePath(const QString& s)
     settings.setValue("encode/path", s);
 }
 
-bool ShotcutSettings::meltedEnabled() const
+bool ShotcutSettings::encodeFreeSpaceCheck() const
 {
-    return settings.value("melted/enabled", false).toBool();
+    return settings.value("encode/freeSpaceCheck", true).toBool();
 }
 
-void ShotcutSettings::setMeltedEnabled(bool b)
+void ShotcutSettings::setEncodeFreeSpaceCheck(bool b)
 {
-    settings.setValue("melted/enabled", b);
+    settings.setValue("encode/freeSpaceCheck", b);
 }
 
-QStringList ShotcutSettings::meltedServers() const
+bool ShotcutSettings::encodeUseHardware() const
 {
-    return settings.value("melted/servers").toStringList();
+    return settings.value("encode/useHardware").toBool();
 }
 
-void ShotcutSettings::setMeltedServers(const QStringList& ls)
+void ShotcutSettings::setEncodeUseHardware(bool b)
 {
-    settings.setValue("melted/servers", ls);
+    settings.setValue("encode/useHardware", b);
+}
+
+QStringList ShotcutSettings::encodeHardware() const
+{
+    return settings.value("encode/hardware").toStringList();
+}
+
+void ShotcutSettings::setEncodeHardware(const QStringList& ls)
+{
+    if (ls.isEmpty())
+        settings.remove("encode/hardware");
+    else
+        settings.setValue("encode/hardware", ls);
+}
+
+bool ShotcutSettings::encodeAdvanced() const
+{
+    return settings.value("encode/advanced", false).toBool();
+}
+
+void ShotcutSettings::setEncodeAdvanced(bool b)
+{
+    settings.setValue("encode/advanced", b);
+}
+
+bool ShotcutSettings::showConvertClipDialog() const
+{
+    return settings.value("showConvertClipDialog", true).toBool();
+}
+
+void ShotcutSettings::setShowConvertClipDialog(bool b)
+{
+    settings.setValue("showConvertClipDialog", b);
+}
+
+int ShotcutSettings::playerAudioChannels() const
+{
+    return settings.value("player/audioChannels", 2).toInt();
+}
+
+void ShotcutSettings::setPlayerAudioChannels(int i)
+{
+    settings.setValue("player/audioChannels", i);
+    emit playerAudioChannelsChanged(i);
 }
 
 QString ShotcutSettings::playerDeinterlacer() const
@@ -268,6 +327,11 @@ void ShotcutSettings::setPlayerInterpolation(const QString& s)
 bool ShotcutSettings::playerGPU() const
 {
     return settings.value("player/gpu", false).toBool();
+}
+
+bool ShotcutSettings::playerWarnGPU() const
+{
+    return settings.value("player/warnGPU", true).toBool();
 }
 
 void ShotcutSettings::setPlayerJACK(bool b)
@@ -388,6 +452,17 @@ void ShotcutSettings::setTimelineShowThumbnails(bool b)
     emit timelineShowThumbnailsChanged();
 }
 
+bool ShotcutSettings::timelineRipple() const
+{
+    return settings.value("timeline/ripple", false).toBool();
+}
+
+void ShotcutSettings::setTimelineRipple(bool b)
+{
+    settings.setValue("timeline/ripple", b);
+    emit timelineRippleChanged();
+}
+
 bool ShotcutSettings::timelineRippleAllTracks() const
 {
     return settings.value("timeline/rippleAllTracks", false).toBool();
@@ -397,6 +472,17 @@ void ShotcutSettings::setTimelineRippleAllTracks(bool b)
 {
     settings.setValue("timeline/rippleAllTracks", b);
     emit timelineRippleAllTracksChanged();
+}
+
+bool ShotcutSettings::timelineSnap() const
+{
+    return settings.value("timeline/snap", true).toBool();
+}
+
+void ShotcutSettings::setTimelineSnap(bool b)
+{
+    settings.setValue("timeline/snap", b);
+    emit timelineSnapChanged();
 }
 
 QString ShotcutSettings::filterFavorite(const QString& filterName)
@@ -483,6 +569,26 @@ void ShotcutSettings::setNoUpgrade(bool value)
     settings.setValue("noupgrade", value);
 }
 
+bool ShotcutSettings::checkUpgradeAutomatic()
+{
+    return settings.value("checkUpgradeAutomatic", false).toBool();
+}
+
+void ShotcutSettings::setCheckUpgradeAutomatic(bool b)
+{
+    settings.setValue("checkUpgradeAutomatic", b);
+}
+
+bool ShotcutSettings::askUpgradeAutmatic()
+{
+    return settings.value("askUpgradeAutmatic", true).toBool();
+}
+
+void ShotcutSettings::setAskUpgradeAutomatic(bool b)
+{
+    settings.setValue("askUpgradeAutmatic", b);
+}
+
 void ShotcutSettings::sync()
 {
     settings.sync();
@@ -500,7 +606,9 @@ void ShotcutSettings::setAppDataForSession(const QString& location)
 {
     // This is intended to be called when using a command line option
     // to set the AppData location.
-    instance.reset(new ShotcutSettings(location));
+    appDataForSession = location;
+    if (instance)
+        instance.reset(new ShotcutSettings(location));
 }
 
 void ShotcutSettings::setAppDataLocally(const QString& location)
@@ -520,4 +628,72 @@ void ShotcutSettings::setAppDataLocally(const QString& location)
     QSettings localSettings;
     localSettings.setValue(APP_DATA_DIR_KEY, location);
     localSettings.sync();
+}
+
+QStringList ShotcutSettings::layouts() const
+{
+    return settings.value("layout/layouts").toStringList();
+}
+
+bool ShotcutSettings::setLayout(const QString& name, const QByteArray& geometry, const QByteArray& state)
+{
+    bool isNew = false;
+    QStringList layouts = Settings.layouts();
+    if (layouts.indexOf(name) == -1) {
+        isNew = true;
+        layouts.append(name);
+        settings.setValue("layout/layouts", layouts);
+    }
+    settings.setValue(QString("layout/%1_%2").arg(name).arg("geometry"), geometry);
+    settings.setValue(QString("layout/%1_%2").arg(name).arg("state"), state);
+    return isNew;
+}
+
+QByteArray ShotcutSettings::layoutGeometry(const QString& name)
+{
+    QString key = QString("layout/%1_geometry").arg(name);
+    return settings.value(key).toByteArray();
+}
+
+QByteArray ShotcutSettings::layoutState(const QString& name)
+{
+    QString key = QString("layout/%1_state").arg(name);
+    return settings.value(key).toByteArray();
+}
+
+bool ShotcutSettings::removeLayout(const QString& name)
+{
+    QStringList list = layouts();
+    int index = list.indexOf(name);
+    if (index > -1) {
+        list.removeAt(index);
+        if (list.isEmpty())
+            settings.remove("layout/layouts");
+        else
+            settings.setValue("layout/layouts", list);
+        settings.remove(QString("layout/%1_%2").arg(name).arg("geometry"));
+        settings.remove(QString("layout/%1_%2").arg(name).arg("state"));
+        return true;
+    }
+    return false;
+}
+
+bool ShotcutSettings::clearRecent() const
+{
+    return settings.value("clearRecent", false).toBool();
+}
+
+void ShotcutSettings::setClearRecent(bool b)
+{
+    settings.setValue("clearRecent", b);
+}
+
+QString ShotcutSettings::projectsFolder() const
+{
+    return settings.value("projectsFolder", QStandardPaths::standardLocations(QStandardPaths::MoviesLocation)).toString();
+}
+
+void ShotcutSettings::setProjectsFolder(const QString &path)
+{
+    settings.setValue("projectsFolder", path);
 }

@@ -47,14 +47,6 @@ SOURCES += main.cpp\
     models/playlistmodel.cpp \
     docks/playlistdock.cpp \
     dialogs/durationdialog.cpp \
-    mvcp/qconsole.cpp \
-    mvcp/mvcp_socket.cpp \
-    mvcp/meltedclipsmodel.cpp \
-    mvcp/meltedunitsmodel.cpp \
-    mvcp/mvcpthread.cpp \
-    mvcp/meltedplaylistmodel.cpp \
-    mvcp/meltedplaylistdock.cpp \
-    mvcp/meltedserverdock.cpp \
     widgets/colorwheel.cpp \
     models/attachedfiltersmodel.cpp \
     models/metadatamodel.cpp \
@@ -90,6 +82,7 @@ SOURCES += main.cpp\
     jobs/abstractjob.cpp \
     jobs/meltjob.cpp \
     jobs/encodejob.cpp \
+    jobs/postjobaction.cpp \
     jobs/videoqualityjob.cpp \
     commands/playlistcommands.cpp \
     docks/scopedock.cpp \
@@ -99,6 +92,7 @@ SOURCES += main.cpp\
     widgets/scopes/audiopeakmeterscopewidget.cpp \
     widgets/scopes/audiospectrumscopewidget.cpp \
     widgets/scopes/audiowaveformscopewidget.cpp \
+    widgets/scopes/videohistogramscopewidget.cpp \
     widgets/scopes/videowaveformscopewidget.cpp \
     sharedframe.cpp \
     widgets/audioscale.cpp \
@@ -114,7 +108,13 @@ SOURCES += main.cpp\
     jobs/ffprobejob.cpp \
     jobs/ffmpegjob.cpp \
     dialogs/unlinkedfilesdialog.cpp \
-    dialogs/transcodedialog.cpp
+    dialogs/transcodedialog.cpp \
+    docks/keyframesdock.cpp \
+    qmltypes/qmlproducer.cpp \
+    models/keyframesmodel.cpp \
+    widgets/textproducerwidget.cpp \
+    dialogs/listselectiondialog.cpp \
+    widgets/newprojectfolder.cpp
 
 
 HEADERS  += mainwindow.h \
@@ -155,13 +155,6 @@ HEADERS  += mainwindow.h \
     models/playlistmodel.h \
     docks/playlistdock.h \
     dialogs/durationdialog.h \
-    mvcp/qconsole.h \
-    mvcp/meltedclipsmodel.h \
-    mvcp/meltedunitsmodel.h \
-    mvcp/mvcpthread.h \
-    mvcp/meltedplaylistmodel.h \
-    mvcp/meltedplaylistdock.h \
-    mvcp/meltedserverdock.h \
     transportcontrol.h \
     widgets/colorwheel.h \
     models/attachedfiltersmodel.h \
@@ -198,6 +191,7 @@ HEADERS  += mainwindow.h \
     jobs/abstractjob.h \
     jobs/meltjob.h \
     jobs/encodejob.h \
+    jobs/postjobaction.h \
     jobs/videoqualityjob.h \
     commands/playlistcommands.h \
     docks/scopedock.h \
@@ -207,6 +201,7 @@ HEADERS  += mainwindow.h \
     widgets/scopes/audiopeakmeterscopewidget.h \
     widgets/scopes/audiospectrumscopewidget.h \
     widgets/scopes/audiowaveformscopewidget.h \
+    widgets/scopes/videohistogramscopewidget.h \
     widgets/scopes/videowaveformscopewidget.h \
     dataqueue.h \
     sharedframe.h \
@@ -224,7 +219,13 @@ HEADERS  += mainwindow.h \
     jobs/ffprobejob.h \
     jobs/ffmpegjob.h \
     dialogs/unlinkedfilesdialog.h \
-    dialogs/transcodedialog.h
+    dialogs/transcodedialog.h \
+    docks/keyframesdock.h \
+    qmltypes/qmlproducer.h \
+    models/keyframesmodel.h \
+    widgets/textproducerwidget.h \
+    dialogs/listselectiondialog.h \
+    widgets/newprojectfolder.h
 
 FORMS    += mainwindow.ui \
     openotherdialog.ui \
@@ -253,8 +254,6 @@ FORMS    += mainwindow.ui \
     dialogs/textviewerdialog.ui \
     docks/playlistdock.ui \
     dialogs/durationdialog.ui \
-    mvcp/meltedserverdock.ui \
-    mvcp/meltedplaylistdock.ui \
     dialogs/customprofiledialog.ui \
     htmleditor/htmleditor.ui \
     htmleditor/inserthtmldialog.ui \
@@ -267,7 +266,10 @@ FORMS    += mainwindow.ui \
     widgets/trackpropertieswidget.ui \
     widgets/timelinepropertieswidget.ui \
     dialogs/unlinkedfilesdialog.ui \
-    dialogs/transcodedialog.ui
+    dialogs/transcodedialog.ui \
+    widgets/textproducerwidget.ui \
+    dialogs/listselectiondialog.ui \
+    widgets/newprojectfolder.ui
 
 RESOURCES += \
     ../icons/resources.qrc \
@@ -275,58 +277,33 @@ RESOURCES += \
 
 OTHER_FILES += \
     ../COPYING \
-    shotcut.rc \
+    ../packaging/windows/shotcut.rc \
     ../scripts/build-shotcut.sh \
-    ../icons/shotcut.icns \
-    ../scripts/shotcut.nsi \
-    ../Info.plist \
+    ../packaging/macos/shotcut.icns \
+    ../packaging/windows/shotcut.nsi \
+    ../packaging/macos/Info.plist \
     ../icons/dark/index.theme \
     ../icons/light/index.theme \
-    ../snap/snapcraft.yaml \
-    ../snap/setup/gui/shotcut.desktop \
-    ../shotcut.appdata.xml
+    ../packaging/linux/appimage/appimage.yml \
+    ../packaging/linux/snap/snapcraft.yaml \
+    ../packaging/linux/snap/package.mak \
+    ../packaging/linux/org.shotcut.Shotcut.appdata.xml \
+    ../packaging/linux/org.shotcut.Shotcut.desktop \
+    ../packaging/linux/org.shotcut.Shotcut.xml \
+    ../packaging/linux/shotcut.1
 
-TRANSLATIONS += \
-    ../translations/shotcut_ca.ts \
-    ../translations/shotcut_cs.ts \
-    ../translations/shotcut_da.ts \
-    ../translations/shotcut_de.ts \
-    ../translations/shotcut_el.ts \
-    ../translations/shotcut_en.ts \
-    ../translations/shotcut_es.ts \
-    ../translations/shotcut_fr.ts \
-    ../translations/shotcut_gd.ts \
-    ../translations/shotcut_hu.ts \
-    ../translations/shotcut_it.ts \
-    ../translations/shotcut_ja.ts \
-    ../translations/shotcut_nb.ts \
-    ../translations/shotcut_ne.ts \
-    ../translations/shotcut_nl.ts \
-    ../translations/shotcut_oc.ts \
-    ../translations/shotcut_pl.ts \
-    ../translations/shotcut_pt_BR.ts \
-    ../translations/shotcut_pt_PT.ts \
-    ../translations/shotcut_ru.ts \
-    ../translations/shotcut_sk.ts \
-    ../translations/shotcut_sl.ts \
-    ../translations/shotcut_tr.ts \
-    ../translations/shotcut_uk.ts \
-    ../translations/shotcut_zh_CN.ts \
-    ../translations/shotcut_zh_TW.ts
-
-
-INCLUDEPATH = ../CuteLogger/include ../mvcp
+INCLUDEPATH = ../CuteLogger/include
 
 debug_and_release {
     build_pass:CONFIG(debug, debug|release) {
-        LIBS += -L../CuteLogger/debug -L../mvcp/debug
+        LIBS += -L../CuteLogger/debug
     } else {
-        LIBS += -L../CuteLogger/release -L../mvcp/release
+        LIBS += -L../CuteLogger/release
     }
 } else {
-    LIBS += -L../CuteLogger -L../mvcp
+    LIBS += -L../CuteLogger
 }
-LIBS += -lCuteLogger -lmvcp -lpthread
+LIBS += -lCuteLogger
 
 isEmpty(SHOTCUT_VERSION) {
     !win32:SHOTCUT_VERSION = $$system(date "+%y.%m.%d")
@@ -337,8 +314,8 @@ VERSION = $$SHOTCUT_VERSION
 
 mac {
     TARGET = Shotcut
-    ICON = ../icons/shotcut.icns
-    QMAKE_INFO_PLIST = ../Info.plist
+    ICON = ../packaging/macos/shotcut.icns
+    QMAKE_INFO_PLIST = ../packaging/macos/Info.plist
     INCLUDEPATH += $$[QT_INSTALL_HEADERS]
 
     # QMake from Qt 5.1.0 on OSX is messing with the environment in which it runs
@@ -346,9 +323,15 @@ mac {
     isEmpty(MLT_PREFIX) {
         MLT_PREFIX = /opt/local
     }
-    INCLUDEPATH += $$MLT_PREFIX/include/mlt++
-    INCLUDEPATH += $$MLT_PREFIX/include/mlt
-    LIBS += -L$$MLT_PREFIX/lib -lmlt++ -lmlt
+    isEmpty(PREFIX) {
+        INCLUDEPATH += $$MLT_PREFIX/include/mlt++
+        INCLUDEPATH += $$MLT_PREFIX/include/mlt
+        LIBS += -L$$MLT_PREFIX/lib -lmlt++ -lmlt
+    } else {
+        INCLUDEPATH += $$PREFIX/Contents/Frameworks/include/mlt++
+        INCLUDEPATH += $$PREFIX/Contents/Frameworks/include/mlt
+        LIBS += -L$$PREFIX/Contents/Frameworks -lmlt++ -lmlt
+    }
 }
 win32 {
     CONFIG += windows rtti
@@ -362,7 +345,7 @@ win32 {
         INCLUDEPATH += $$PWD/../drmingw/include
         LIBS += -L$$PWD/../drmingw/x64/lib -lexchndl
     }
-    RC_FILE = shotcut.rc
+    RC_FILE = ../packaging/windows/shotcut.rc
 }
 unix:!mac {
     QT += x11extras
@@ -379,16 +362,25 @@ win32:isEmpty(PREFIX) {
     message("Install PREFIX not set; using C:\\Projects\\Shotcut. You can change this with 'qmake PREFIX=...'")
     PREFIX = C:\\Projects\\Shotcut
 }
-unix:target.path = $$PREFIX/bin
+unix:!mac:target.path = $$PREFIX/bin
 win32:target.path = $$PREFIX
 INSTALLS += target
 
 qmlfiles.files = $$PWD/qml
-qmlfiles.path = $$PREFIX/share/shotcut
+!mac:qmlfiles.path = $$PREFIX/share/shotcut
+mac:qmlfiles.path = $$PREFIX/Contents/Resources/shotcut
 INSTALLS += qmlfiles
 
 unix:!mac {
-    metainfo.files = $$PWD/../shotcut.appdata.xml
+    metainfo.files = $$PWD/../packaging/linux/org.shotcut.Shotcut.appdata.xml
     metainfo.path = $$PREFIX/share/metainfo
-    INSTALLS += qmlfiles
+    desktop.files = $$PWD/../packaging/linux/org.shotcut.Shotcut.desktop
+    desktop.path = $$PREFIX/share/applications
+    mime.files = $$PWD/../packaging/linux/org.shotcut.Shotcut.xml
+    mime.path = $$PREFIX/share/mime/packages
+    icons.files = $$PWD/../packaging/linux/org.shotcut.Shotcut.png
+    icons.path = $$PREFIX/share/icons/hicolor/64x64/apps
+    man.files = $$PWD/../packaging/linux/shotcut.1
+    man.path = $$PREFIX/share/man/man1
+    INSTALLS += metainfo desktop mime icons man
 }

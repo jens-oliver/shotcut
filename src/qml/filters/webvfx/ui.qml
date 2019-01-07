@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2014-2016 Meltytech, LLC
- * Author: Brian Matherly <pez4brian@yahoo.com>
+ * Copyright (c) 2014-2018 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,7 +27,7 @@ Item {
     id: webvfxRoot
     width: 350
     height: 100
-    property string settingsSavePath: settings.savePath
+    property url settingsSavePath: 'file:///' + settings.savePath
 
     SystemPalette { id: activePalette; colorGroup: SystemPalette.Active }
     Shotcut.File { id: htmlFile }
@@ -82,8 +81,38 @@ Item {
             fileLabelTip.text = qsTr('No HTML file loaded. Click "Open" or "New" to load a file.')
             filter.set("disable", 1)
         }
-        filter.set('in', filter.producerIn)
-        filter.set('out', filter.producerOut)
+        filter.set('in', producer.in)
+        filter.set('out', producer.out)
+    }
+
+    function handleHtmlFile(selectExisting) {
+        webvfxRoot.fileSaved(htmlFile.path)
+        if (!selectExisting)
+            htmlFile.copyFromFile(webvfxCheckBox.checked? ":/scripts/web-animations.html" : ":/scripts/new.html")
+
+        fileLabel.text = htmlFile.fileName
+        fileLabel.color = activePalette.text
+        fileLabelTip.text = htmlFile.url
+        openButton.visible = false
+        newButton.visible = false
+        webvfxCheckBox.enabled = false
+        editButton.visible = true
+        reloadButton.visible = true
+
+        var resource = htmlFile.url
+        if (webvfxCheckBox.checked) {
+            filter.set('duration', filter.duration / profile.fps)
+        } else {
+            resource = "plain:" + resource
+        }
+        filter.set('resource', resource)
+        filter.set("disable", 0)
+
+        if (!selectExisting) {
+            editor.edit(htmlFile.url)
+            editButton.enabled = false
+            reloadButton.enabled = false
+        }
     }
 
     FileDialog {
@@ -96,36 +125,9 @@ Item {
         selectedNameFilter: "HTML-Files (*.htm *.html)"
         onAccepted: {
             htmlFile.url = fileDialog.fileUrl
-            webvfxRoot.fileSaved(htmlFile.path)
-
-            if (fileDialog.selectExisting == false) {
-                if (!htmlFile.suffix()) {
-                    htmlFile.url = htmlFile.url + ".html"
-                }
-                htmlFile.copyFromFile(":/scripts/new.html")
-            }
-
-            fileLabel.text = htmlFile.fileName
-            fileLabel.color = activePalette.text
-            fileLabelTip.text = htmlFile.url
-            openButton.visible = false
-            newButton.visible = false
-            webvfxCheckBox.enabled = false
-            editButton.visible = true
-            reloadButton.visible = true
-
-            var resource = htmlFile.url
-            if (!webvfxCheckBox.checked) {
-                resource = "plain:" + resource
-            }
-            filter.set('resource', resource)
-            filter.set("disable", 0)
-
-            if (!selectExisting) {
-                editor.edit(htmlFile.url)
-                editButton.enabled = false
-                reloadButton.enabled = false
-            }
+            if (!selectExisting && !htmlFile.suffix())
+                htmlFile.url = htmlFile.url + ".html"
+            handleHtmlFile(selectExisting)
         }
         onRejected: {
             openButton.visible = true
@@ -194,9 +196,15 @@ Item {
             id: newButton
             text: qsTr('New...')
             onClicked: {
-                fileDialog.selectExisting = false
-                fileDialog.title = qsTr( "Save HTML File" )
-                fileDialog.open()
+                var filename = application.getNextProjectFile('html')
+                if (filename) {
+                    htmlFile.url = filename
+                    handleHtmlFile(false)
+                } else {
+                    fileDialog.selectExisting = false
+                    fileDialog.title = qsTr( "Save HTML File" )
+                    fileDialog.open()
+                }
             }
             Shotcut.ToolTip {
                  text: qsTr("Load new HTML file.")
@@ -254,5 +262,9 @@ Item {
             Layout.columnSpan: 4
         }
     }
-
+    Connections {
+        target: filter
+        onInChanged: filter.set('duration', filter.duration / profile.fps)
+        onOutChanged: filter.set('duration', filter.duration / profile.fps)
+    }
 }

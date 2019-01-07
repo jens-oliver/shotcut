@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2011-2017 Meltytech, LLC
- * Author: Dan Dennedy <dan@dennedy.org>
+ * Copyright (c) 2011-2018 Meltytech, LLC
  *
  * GL shader based on BSD licensed code from Peter Bengtsson:
  * http://www.fourcc.org/source/YUV420P-OpenGL-GLSLang.c
@@ -25,6 +24,7 @@
 #include <QUrl>
 #include <QOffscreenSurface>
 #include <QtQml>
+#include <QQuickItem>
 #include <Mlt.h>
 #include <Logger.h>
 #include "glwidget.h"
@@ -55,6 +55,7 @@ using namespace Mlt;
 GLWidget::GLWidget(QObject *parent)
     : QQuickWidget(QmlUtilities::sharedEngine(), (QWidget*) parent)
     , Controller()
+    , m_grid(0)
     , m_shader(0)
     , m_glslManager(0)
     , m_initSem(0)
@@ -67,6 +68,7 @@ GLWidget::GLWidget(QObject *parent)
     , m_zoom(0.0f)
     , m_offset(QPoint(0, 0))
     , m_shareContext(0)
+    , m_snapToGrid(true)
 {
     LOG_DEBUG() << "begin";
     m_texture[0] = m_texture[1] = m_texture[2] = 0;
@@ -110,6 +112,7 @@ GLWidget::~GLWidget()
     }
     delete m_shareContext;
     delete m_shader;
+    LOG_DEBUG() << "end";
 }
 
 void GLWidget::initializeGL()
@@ -166,9 +169,9 @@ void GLWidget::initializeGL()
     m_frameRenderer = new FrameRenderer(quickWindow()->openglContext(), &m_offscreenSurface);
     quickWindow()->openglContext()->makeCurrent(quickWindow());
 
-    connect(m_frameRenderer, SIGNAL(frameDisplayed(const SharedFrame&)), this, SIGNAL(frameDisplayed(const SharedFrame&)), Qt::QueuedConnection);
-    connect(m_frameRenderer, SIGNAL(textureReady(GLuint,GLuint,GLuint)), SLOT(updateTexture(GLuint,GLuint,GLuint)), Qt::DirectConnection);
     connect(m_frameRenderer, SIGNAL(frameDisplayed(const SharedFrame&)), SLOT(onFrameDisplayed(const SharedFrame&)), Qt::QueuedConnection);
+    connect(m_frameRenderer, SIGNAL(frameDisplayed(const SharedFrame&)), SIGNAL(frameDisplayed(const SharedFrame&)), Qt::QueuedConnection);
+    connect(m_frameRenderer, SIGNAL(textureReady(GLuint,GLuint,GLuint)), SLOT(updateTexture(GLuint,GLuint,GLuint)), Qt::DirectConnection);
     connect(m_frameRenderer, SIGNAL(imageReady()), SIGNAL(imageReady()));
 
     m_initSem.release();
@@ -179,6 +182,7 @@ void GLWidget::initializeGL()
 void GLWidget::setBlankScene()
 {
     setSource(QmlUtilities::blankVui());
+    m_savedQmlSource.clear();
 }
 
 void GLWidget::resizeGL(int width, int height)
@@ -281,6 +285,9 @@ static void uploadTextures(QOpenGLContext* context, SharedFrame& frame, GLuint t
     int height = frame.get_image_height();
     const uint8_t* image = frame.get_image();
     QOpenGLFunctions* f = context->functions();
+
+    // The planes of pixel data may not be a multiple of the default 4 bytes.
+    f->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
     // Upload each plane of YUV to a texture.
     if (texture[0])
@@ -597,17 +604,17 @@ int GLWidget::reconfigure(bool isMulti)
     QString serviceName = property("mlt_service").toString();
     if (!m_consumer || !m_consumer->is_valid()) {
         if (serviceName.isEmpty()) {
-            m_consumer = new Mlt::FilteredConsumer(profile(), "sdl_audio");
+            m_consumer.reset(new Mlt::FilteredConsumer(profile(), "sdl2_audio"));
             if (m_consumer->is_valid())
-                serviceName = "sdl_audio";
+                serviceName = "sdl2_audio";
             else
                 serviceName = "rtaudio";
-            delete m_consumer;
+            m_consumer.reset();
         }
         if (isMulti)
-            m_consumer = new Mlt::FilteredConsumer(profile(), "multi");
+            m_consumer.reset(new Mlt::FilteredConsumer(profile(), "multi"));
         else
-            m_consumer = new Mlt::FilteredConsumer(profile(), serviceName.toLatin1().constData());
+            m_consumer.reset(new Mlt::FilteredConsumer(profile(), serviceName.toLatin1().constData()));
 
         delete m_threadStartEvent;
         m_threadStartEvent = 0;
@@ -627,6 +634,7 @@ int GLWidget::reconfigure(bool isMulti)
         m_consumer->set("real_time", MLT.realTime());
         m_consumer->set("mlt_image_format", "yuv422");
         m_consumer->set("color_trc", Settings.playerGamma().toLatin1().constData());
+        m_consumer->set("channels", property("audio_channels").toInt());
 
         if (isMulti) {
             m_consumer->set("terminate_on_pause", 0);
@@ -672,8 +680,12 @@ int GLWidget::reconfigure(bool isMulti)
 
 QPoint GLWidget::offset() const
 {
-    return QPoint(m_offset.x() - (MLT.profile().width()  * m_zoom -  width()) / 2,
-                  m_offset.y() - (MLT.profile().height() * m_zoom - height()) / 2);
+    if (m_zoom == 0.0) {
+        return QPoint(0,0);
+    } else {
+        return QPoint(m_offset.x() - (MLT.profile().width()  * m_zoom -  width()) / 2,
+                      m_offset.y() - (MLT.profile().height() * m_zoom - height()) / 2);
+    }
 }
 
 QImage GLWidget::image() const
@@ -710,6 +722,20 @@ void GLWidget::onFrameDisplayed(const SharedFrame &frame)
     m_mutex.lock();
     m_sharedFrame = frame;
     m_mutex.unlock();
+    bool isVui = frame.get_int(kShotcutVuiMetaProperty);
+    if (!isVui && source() != QmlUtilities::blankVui()) {
+        m_savedQmlSource = source();
+        setSource(QmlUtilities::blankVui());
+    } else if (isVui && !m_savedQmlSource.isEmpty() && source() != m_savedQmlSource) {
+        setSource(m_savedQmlSource);
+    }
+    quickWindow()->update();
+}
+
+void GLWidget::setGrid(int grid)
+{
+    m_grid = grid;
+    emit gridChanged();
     quickWindow()->update();
 }
 
@@ -736,12 +762,20 @@ void GLWidget::setOffsetY(int y)
 
 void GLWidget::setCurrentFilter(QmlFilter* filter, QmlMetadata* meta)
 {
-    rootContext()->setContextProperty("filter", filter);
     if (meta && QFile::exists(meta->vuiFilePath().toLocalFile())) {
+        filter->producer().set(kShotcutVuiMetaProperty, 1);
+        rootContext()->setContextProperty("filter", filter);
         setSource(meta->vuiFilePath());
+        refreshConsumer();
     } else {
         setBlankScene();
     }
+}
+
+void GLWidget::setSnapToGrid(bool snap)
+{
+    m_snapToGrid = snap;
+    emit snapToGridChanged();
 }
 
 void GLWidget::updateTexture(GLuint yName, GLuint uName, GLuint vName)

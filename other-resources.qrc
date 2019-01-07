@@ -5,6 +5,7 @@
         <file>scripts/rangy-cssclassapplier.js</file>
         <file>scripts/jquery.js</file>
         <file>scripts/htmleditor.js</file>
-        <file>src/qml/vui_droparea.qml</file>
+        <file>scripts/web-animations.html</file>
+        <file>scripts/web-animations.js</file>
     </qresource>
 </RCC>

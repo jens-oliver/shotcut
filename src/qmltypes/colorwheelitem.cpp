@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2013-2016 Meltytech, LLC
+ * Copyright (c) 2013-2018 Meltytech, LLC
  * Author: Dan Dennedy <dan@dennedy.org>
- * Author: Brian Matherly <pez4brian@yahoo.com>
+ * Author: Brian Matherly <code@brianmatherly.com>
  * Some ideas came from Qt-Plus: https://github.com/liuyanghejerry/Qt-Plus
  * and Steinar Gunderson's Movit demo app.
  *
@@ -99,6 +99,48 @@ void ColorWheelItem::setBlue(int blue)
     }
 }
 
+qreal ColorWheelItem::redF()
+{
+    return m_color.redF();
+}
+
+void ColorWheelItem::setRedF(qreal red)
+{
+    if(m_color.redF() != red) {
+        m_color.setRedF(red);
+        update();
+        emit colorChanged(m_color);
+    }
+}
+
+qreal ColorWheelItem::greenF()
+{
+    return m_color.greenF();
+}
+
+void ColorWheelItem::setGreenF(qreal green)
+{
+    if(m_color.greenF() != green) {
+        m_color.setGreenF(green);
+        update();
+        emit colorChanged(m_color);
+    }
+}
+
+qreal ColorWheelItem::blueF()
+{
+    return m_color.blueF();
+}
+
+void ColorWheelItem::setBlueF(qreal blue)
+{
+    if(m_color.blueF() != blue) {
+        m_color.setBlueF(blue);
+        update();
+        emit colorChanged(m_color);
+    }
+}
+
 int ColorWheelItem::wheelSize() const
 {
     qreal ws = (qreal)width() / (1.0 + 1.0 / WHEEL_SLIDER_RATIO);
@@ -109,9 +151,9 @@ QColor ColorWheelItem::colorForPoint(const QPoint &point)
 {
     if (! m_image.valid(point)) return QColor();
     if (m_isInWheel) {
-        qreal w = wheelSize();
-        qreal xf = qreal(point.x()) / w;
-        qreal yf = 1.0 - qreal(point.y()) / w;
+        qreal w = wheelSize() - m_margin * 2;
+        qreal xf = qreal(point.x() - m_margin) / w;
+        qreal yf = 1.0 - qreal(point.y() - m_margin) / w;
         qreal xp = 2.0 * xf - 1.0;
         qreal yp = 2.0 * yf - 1.0;
         qreal rad = qMin(hypot(xp, yp), 1.0);
@@ -175,6 +217,37 @@ void ColorWheelItem::mouseReleaseEvent(QMouseEvent *event)
 void ColorWheelItem::hoverMoveEvent(QHoverEvent * event)
 {
     updateCursor(event->pos());
+}
+
+void ColorWheelItem::wheelEvent(QWheelEvent *event)
+{
+    QPoint steps = event->angleDelta() / 8 / 15;
+    int delta = steps.y();
+    QColor currentColor = color();
+    int c;
+
+    // Increment/decrement RGB values by delta
+    c = currentColor.red();
+    c += delta;
+    if(c < 0) c = 0;
+    if(c > 255) c = 255;
+    currentColor.setRed(c);
+
+    c = currentColor.green();
+    c += delta;
+    if(c < 0) c = 0;
+    if(c > 255) c = 255;
+    currentColor.setGreen(c);
+
+    c = currentColor.blue();
+    c += delta;
+    if(c < 0) c = 0;
+    if(c > 255) c = 255;
+    currentColor.setBlue(c);
+
+    setColor(currentColor);
+
+    event->accept();
 }
 
 void ColorWheelItem::paint(QPainter *painter)
@@ -241,7 +314,7 @@ void ColorWheelItem::drawWheelDot(QPainter& painter)
     painter.translate(r, r);
     painter.rotate(360.0 - m_color.hue());
     painter.rotate(-105);
-    painter.drawEllipse(QPointF(m_color.saturationF() * r, 0.0), 4, 4);
+    painter.drawEllipse(QPointF(m_color.saturationF() * r - m_margin, 0.0), 4, 4);
     painter.resetTransform();
 }
 

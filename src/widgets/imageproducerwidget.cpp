@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2012-2017 Meltytech, LLC
- * Author: Dan Dennedy <dan@dennedy.org>
+ * Copyright (c) 2012-2018 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -44,7 +43,7 @@ Mlt::Producer* ImageProducerWidget::newProducer(Mlt::Profile& profile)
     if (p->is_valid()) {
         if (ui->durationSpinBox->value() > p->get_length())
             p->set("length", ui->durationSpinBox->value());
-        p->set("out", ui->durationSpinBox->value() - 1);
+        p->set_in_and_out(0, ui->durationSpinBox->value() - 1);
     }
     return p;
 }
@@ -62,9 +61,8 @@ void ImageProducerWidget::setProducer(Mlt::Producer* p)
         p->set("ttl", 1);
     }
     ui->filenameLabel->setText(ui->filenameLabel->fontMetrics().elidedText(s, Qt::ElideLeft, width() - 40));
-    ui->durationSpinBox->setValue(m_producer->get_out() + 1);
-    ui->widthLineEdit->setText(p->get("meta.media.width"));
-    ui->heightLineEdit->setText(p->get("meta.media.height"));
+    updateDuration();
+    ui->resolutionLabel->setText(QString("%1x%2").arg(p->get("meta.media.width")).arg(p->get("meta.media.height")));
     ui->aspectNumSpinBox->blockSignals(true);
     if (p->get(kAspectRatioNumerator) && p->get(kAspectRatioDenominator)) {
         ui->aspectNumSpinBox->setValue(p->get_int(kAspectRatioNumerator));
@@ -87,11 +85,15 @@ void ImageProducerWidget::setProducer(Mlt::Producer* p)
         ui->repeatSpinBox->setValue(m_producer->get_int("ttl"));
     ui->sequenceCheckBox->setChecked(m_producer->get_int(kShotcutSequenceProperty));
     ui->repeatSpinBox->setEnabled(m_producer->get_int(kShotcutSequenceProperty));
+    ui->durationSpinBox->setEnabled(!p->get(kMultitrackItemProperty));
 }
 
-void ImageProducerWidget::setOutPoint(int duration)
+void ImageProducerWidget::updateDuration()
 {
-    ui->durationSpinBox->setValue(duration + 1);
+    if (m_producer->get(kFilterOutProperty))
+        ui->durationSpinBox->setValue(m_producer->get_int(kFilterOutProperty) - m_producer->get_int(kFilterInProperty) + 1);
+    else
+        ui->durationSpinBox->setValue(m_producer->get_playtime());
 }
 
 void ImageProducerWidget::reopen(Mlt::Producer* p)
@@ -119,7 +121,7 @@ void ImageProducerWidget::recreateProducer()
     p->pass_list(*m_producer, "force_aspect_ratio," kAspectRatioNumerator ", resource, " kAspectRatioDenominator
         ", ttl," kShotcutResourceProperty ", autolength, length," kShotcutSequenceProperty ", " kPlaylistIndexProperty);
     Mlt::Controller::copyFilters(*m_producer, *p);
-    if (m_producer->get_int(kMultitrackItemProperty)) {
+    if (m_producer->get(kMultitrackItemProperty)) {
         emit producerChanged(p);
         delete p;
     } else {
@@ -134,7 +136,7 @@ void ImageProducerWidget::on_resetButton_clicked()
         s = m_producer->get(kShotcutResourceProperty);
     Mlt::Producer* p = new Mlt::Producer(MLT.profile(), s);
     Mlt::Controller::copyFilters(*m_producer, *p);
-    if (m_producer->get_int(kMultitrackItemProperty)) {
+    if (m_producer->get(kMultitrackItemProperty)) {
         emit producerChanged(p);
         delete p;
     } else {
@@ -166,7 +168,7 @@ void ImageProducerWidget::on_durationSpinBox_editingFinished()
 {
     if (!m_producer)
         return;
-    if (ui->durationSpinBox->value() == m_producer->get_out() + 1)
+    if (ui->durationSpinBox->value() == m_producer->get_playtime())
         return;
     recreateProducer();
 }

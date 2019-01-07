@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2012-2017 Meltytech, LLC
- * Author: Dan Dennedy <dan@dennedy.org>
+ * Copyright (c) 2012-2018 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +18,7 @@
 #ifndef ABSTRACTJOB_H
 #define ABSTRACTJOB_H
 
+#include "postjobaction.h"
 #include <QProcess>
 #include <QModelIndex>
 #include <QList>
@@ -45,7 +45,8 @@ public:
     QList<QAction*> standardActions() const { return m_standardActions; }
     QList<QAction*> successActions() const { return m_successActions; }
     QTime estimateRemaining(int percent);
-    QTime time() const { return m_time; }
+    QTime time() const { return m_totalTime; }
+    void setPostJobAction(PostJobAction* action);
 
 public slots:
     virtual void start();
@@ -53,7 +54,7 @@ public slots:
 
 signals:
     void progressUpdated(QStandardItem* item, int percent);
-    void finished(AbstractJob* job, bool isSuccess);
+    void finished(AbstractJob* job, bool isSuccess, QString failureTime = QString());
 
 protected:
     QList<QAction*> m_standardActions;
@@ -63,13 +64,20 @@ protected:
 protected slots:
     virtual void onFinished(int exitCode, QProcess::ExitStatus exitStatus);
     virtual void onReadyRead();
+    virtual void onStarted();
+
+private slots:
+    void onProgressUpdated(QStandardItem*, int percent);
 
 private:
     bool m_ran;
     bool m_killed;
     QString m_log;
     QString m_label;
-    QTime m_time;
+    QTime m_estimateTime;
+    int m_startingPercent;
+    QTime m_totalTime;
+    QScopedPointer<PostJobAction> m_postJobAction;
 };
 
 #endif // ABSTRACTJOB_H

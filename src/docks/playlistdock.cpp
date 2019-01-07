@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2012-2017 Meltytech, LLC
- * Author: Dan Dennedy <dan@dennedy.org>
+ * Copyright (c) 2012-2018 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,7 +22,8 @@
 #include "settings.h"
 #include "shotcut_mlt_properties.h"
 #include "widgets/playlisticonview.h"
-#include <commands/playlistcommands.h>
+#include "util.h"
+#include "commands/playlistcommands.h"
 #include <Logger.h>
 
 #include <QMenu>
@@ -31,6 +31,8 @@
 #include <QPainter>
 #include <QDebug>
 #include <QHeaderView>
+#include <QKeyEvent>
+#include <QDir>
 
 class TiledItemDelegate : public QStyledItemDelegate
 {
@@ -308,7 +310,7 @@ void PlaylistDock::on_actionInsertCut_triggered()
 
 void PlaylistDock::on_actionAppendCut_triggered()
 {
-    if (MLT.producer() && MLT.producer()->is_valid()) {
+    if (MLT.producer() && MLT.producer()->is_valid() && !MAIN.isSourceClipMyProject()) {
         if (MLT.isSeekableClip()
             || (MLT.savedProducer() && MLT.isSeekable(MLT.savedProducer()))) {
             MAIN.undoStack()->push(
@@ -355,7 +357,7 @@ void PlaylistDock::on_actionUpdate_triggered()
     QModelIndex index = m_view->currentIndex();
     if (!index.isValid() || !m_model.playlist()) return;
     Mlt::ClipInfo* info = m_model.playlist()->clip_info(index.row());
-    if (!info) return;
+    if (!info || MAIN.isSourceClipMyProject()) return;
     if (MLT.producer()->type() != playlist_type) {
         if (MLT.isSeekable()) {
             MAIN.undoStack()->push(new Playlist::UpdateCommand(m_model, MLT.XML(), index.row()));
@@ -519,16 +521,25 @@ void PlaylistDock::onDropped(const QMimeData *data, int row)
     if (data && data->hasUrls()) {
         int insertNextAt = row;
         bool first = true;
-        foreach (QUrl url, data->urls()) {
-            QString path = MAIN.removeFileScheme(url);
+        QStringList fileNames = Util::sortedFileList(Util::expandDirectories(data->urls()));
+        foreach (QString path, fileNames) {
+            if (MAIN.isSourceClipMyProject(path)) continue;
             Mlt::Producer p(MLT.profile(), path.toUtf8().constData());
             if (p.is_valid()) {
+                // Convert MLT XML to a virtual clip.
+                if (!qstrcmp(p.get("mlt_service"), "xml")) {
+                    p.set(kShotcutVirtualClip, 1);
+                    p.set("resource", path.toUtf8().constData());
+                    first = false;
+                }
                 Mlt::Producer* producer = &p;
                 if (first) {
                     first = false;
-                    MAIN.open(path);
-                    if (MLT.producer() && MLT.producer()->is_valid())
-                        producer = MLT.producer();
+                    if (!MLT.producer() || !MLT.producer()->is_valid()) {
+                        MAIN.open(path);
+                        if (MLT.producer() && MLT.producer()->is_valid())
+                            producer = MLT.producer();
+                    }
                 }
                 // Convert avformat to avformat-novalidate so that XML loads faster.
                 if (!qstrcmp(producer->get("mlt_service"), "avformat")) {
@@ -547,6 +558,8 @@ void PlaylistDock::onDropped(const QMimeData *data, int row)
         if (MLT.producer() && MLT.producer()->is_valid()) {
             if (MLT.producer()->type() == playlist_type) {
                 emit showStatusMessage(tr("You cannot insert a playlist into a playlist!"));
+            } else if (MAIN.isSourceClipMyProject()) {
+                return;
             } else if (MLT.isSeekable()) {
                 if (row == -1) {
                     MAIN.undoStack()->push(new Playlist::AppendCommand(m_model, data->data(Mlt::XmlMimeType)));
@@ -747,4 +760,18 @@ void PlaylistDock::on_detailsButton_clicked()
     ui->actionTiled->setChecked(false);
     ui->actionIcons->setChecked(false);
     updateViewModeFromActions();
+}
+
+void PlaylistDock::keyPressEvent(QKeyEvent* event)
+{
+    QDockWidget::keyPressEvent(event);
+    if (!event->isAccepted())
+        MAIN.keyPressEvent(event);
+}
+
+void PlaylistDock::keyReleaseEvent(QKeyEvent* event)
+{
+    QDockWidget::keyReleaseEvent(event);
+    if (!event->isAccepted())
+        MAIN.keyReleaseEvent(event);
 }

@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2011-2017 Meltytech, LLC
- * Author: Dan Dennedy <dan@dennedy.org>
+ * Copyright (c) 2011-2018 Meltytech, LLC
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -96,7 +95,7 @@ public:
     QTranslator qtTranslator;
     QTranslator qtBaseTranslator;
     QTranslator shotcutTranslator;
-    QString resourceArg;
+    QStringList resourceArg;
     bool isFullScreen;
     QString appDirArg;
 
@@ -104,8 +103,14 @@ public:
         : QApplication(argc, argv)
     {
         QDir dir(applicationDirPath());
+#ifdef Q_OS_MAC
+        dir.cdUp();
+        dir.cd("PlugIns");
+        dir.cd("qt");
+#else
         dir.cd("lib");
         dir.cd("qt5");
+#endif
         addLibraryPath(dir.absolutePath());
         setOrganizationName("Meltytech");
         setOrganizationDomain("meltytech.com");
@@ -132,12 +137,15 @@ public:
         QCommandLineOption gpuOption("gpu",
             QCoreApplication::translate("main", "Use GPU processing."));
         parser.addOption(gpuOption);
+        QCommandLineOption clearRecentOption("clear-recent",
+            QCoreApplication::translate("main", "Clear Recent on Exit"));
+        parser.addOption(clearRecentOption);
         QCommandLineOption appDataOption("appdata",
             QCoreApplication::translate("main", "The directory for app configuration and data."),
             QCoreApplication::translate("main", "directory"));
         parser.addOption(appDataOption);
-        parser.addPositionalArgument("resource",
-            QCoreApplication::translate("main", "A file to open."));
+        parser.addPositionalArgument("[FILE]...",
+            QCoreApplication::translate("main", "Zero or more files or folders to open"));
         parser.process(arguments());
 #ifdef Q_OS_WIN
         isFullScreen = false;
@@ -145,14 +153,15 @@ public:
         isFullScreen = parser.isSet(fullscreenOption);
 #endif
         setProperty("noupgrade", parser.isSet(noupgradeOption));
+        setProperty("clearRecent", parser.isSet(clearRecentOption));
         if (!parser.value(appDataOption).isEmpty()) {
             appDirArg = parser.value(appDataOption);
-            Settings.setAppDataForSession(appDirArg);
+            ShotcutSettings::setAppDataForSession(appDirArg);
         }
         if (parser.isSet(gpuOption))
             Settings.setPlayerGPU(true);
         if (!parser.positionalArguments().isEmpty())
-            resourceArg = parser.positionalArguments().first();
+            resourceArg = parser.positionalArguments();
 
         // Startup logging.
         dir = Settings.appDataLocation();
@@ -173,13 +182,14 @@ public:
         mlt_log_set_level(MLT_LOG_INFO);
 #endif
         mlt_log_set_callback(mlt_log_handler);
+        cuteLogger->logToGlobalInstance("qml", true);
 
         // Log some basic info.
         LOG_INFO() << "Starting Shotcut version" << SHOTCUT_VERSION;
 #if defined (Q_OS_WIN)
         LOG_INFO() << "Windows version" << QSysInfo::windowsVersion();
 #elif defined(Q_OS_MAC)
-        LOG_INFO() << "OS X version" << QSysInfo::macVersion();
+        LOG_INFO() << "macOS version" << QSysInfo::macVersion();
 #else
         LOG_INFO() << "Linux version";
 #endif
@@ -187,6 +197,7 @@ public:
         LOG_INFO() << "locale =" << QLocale();
         LOG_INFO() << "install dir =" <<  applicationDirPath();
         LOG_INFO() << "device pixel ratio =" << devicePixelRatio();
+        Settings.log();
 
 #if defined(Q_OS_WIN)
         if (Settings.playerGPU()) {
@@ -236,7 +247,7 @@ protected:
     bool event(QEvent *event) {
         if (event->type() == QEvent::FileOpen) {
             QFileOpenEvent *openEvent = static_cast<QFileOpenEvent*>(event);
-            resourceArg = openEvent->file();
+            resourceArg << openEvent->file();
             return true;
         }
         else return QApplication::event(event);
@@ -248,15 +259,30 @@ int main(int argc, char **argv)
 #if defined(Q_OS_WIN) && defined(QT_DEBUG)
     ExcHndlInit();
 #endif
-#if defined(Q_OS_UNIX) && !defined(Q_OS_MAC)
-    QCoreApplication::setAttribute(Qt::AA_X11InitThreads);
-#endif
 #if QT_VERSION >= 0x050600
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 #endif
+#ifdef Q_OS_MAC
+    // Launcher and Spotlight on macOS are not setting this environment
+    // variable needed by setlocale() as used by MLT.
+    if (QProcessEnvironment::systemEnvironment().value("LC_NUMERIC").isEmpty()) {
+        qputenv("LC_NUMERIC", QLocale().name().toUtf8());
+
+        QLocale localeByName(QLocale(QLocale().language(), QLocale().script(), QLocale().country()));
+        if (QLocale().decimalPoint() != localeByName.decimalPoint()) {
+            // If region's numeric format does not match the language's, then we run
+            // into problems because we told MLT and libc to use a different numeric
+            // locale than actually in use by Qt because it is unable to give numeric
+            // locale as a set of ISO-639 codes.
+            QLocale::setDefault(localeByName);
+            qputenv("LANG", QLocale().name().toUtf8());
+        }
+    }
+#endif
+
     Application a(argc, argv);
-    QSplashScreen splash(QPixmap(":/icons/shotcut-logo-640.png"));
-    splash.showMessage(QCoreApplication::translate("main", "Loading plugins..."), Qt::AlignHCenter | Qt::AlignBottom);
+    QSplashScreen splash(QPixmap(":/icons/shotcut-logo-320x320.png"));
+    splash.showMessage(QCoreApplication::translate("main", "Loading plugins..."), Qt::AlignRight | Qt::AlignVCenter);
     splash.show();
 
     a.setProperty("system-style", a.style()->objectName());
@@ -270,7 +296,7 @@ int main(int argc, char **argv)
     splash.finish(a.mainWindow);
 
     if (!a.resourceArg.isEmpty())
-        a.mainWindow->open(a.resourceArg);
+        a.mainWindow->openMultiple(a.resourceArg);
     else
         a.mainWindow->open(a.mainWindow->untitledFileName());
 
@@ -279,9 +305,10 @@ int main(int argc, char **argv)
     if (EXIT_RESTART == result) {
         LOG_DEBUG() << "restarting app";
         QProcess* restart = new QProcess;
-        restart->start(a.applicationFilePath(), QStringList());
-        restart->waitForReadyRead();
-        restart->waitForFinished(1000);
+        QStringList args = a.arguments();
+        if (!args.isEmpty())
+            args.removeFirst();
+        restart->start(a.applicationFilePath(), args, QIODevice::NotOpen);
         result = EXIT_SUCCESS;
     }
     return result;
